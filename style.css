@@ -1,0 +1,38 @@
+*{
+    margin: 0 ;
+    padding: 0;
+    box-sizing: content-box;
+}
+
+body{
+    background-color: black;
+    color: white;
+    padding: 5px;
+    width: 100%;
+    height: 100vh;
+}
+
+main{
+    display: flex;
+    
+    height: 95%;
+    width: 95%;
+    gap: 50px;
+}
+
+#contenedorDeTexto{
+    display: flex;
+    width: 50%;
+    
+}
+#codigo{
+    height: 80%;
+    width: 100%;
+}
+
+#ejecutar{
+    position: relative;
+    right: 30px;
+    width: 25px;
+    height: 25px;
+}

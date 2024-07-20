@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Threads</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <div>Hola</div>
+    </header>
+    <main>
+        <section id="contenedorDeTexto">  
+            <textarea name="codigo" id="codigo">global Int n = 0;
+
+Thread(2){
+n = n + 1;
+}
+            </textarea>
+            <button id="ejecutar">></button>
+            
+        </section>
+        <section id="visual">
+            <div>Variables globales</div>
+        </section>
+    </main>
+    <script type="module" src="/script.js"></script>
+</body>
+</html>   
