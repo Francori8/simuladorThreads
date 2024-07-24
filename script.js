@@ -1,5 +1,5 @@
-import Memoria from "/memoria.js"
-import Hilo  from "/hilos.js"
+import Memoria from "./memoria.js"
+import Hilo  from "./hilos.js"
 import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura} from "./instrucciones.js"
 import EstadoGlobal from "./estadoGlobal.js"
 
