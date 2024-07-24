@@ -15,8 +15,8 @@ export default class Memoria{
         return this.contenido.some(vari => vari.esEsteNombre(nombre))
     }
 
-    verValor(nombre){
-        return this.buscarVariable(nombre).valor()
+    verValor(nombre){ 
+        return this.buscarVariable(nombre).verValor()
     }
 
     actualiarVariable(nombre, valor){
@@ -25,6 +25,10 @@ export default class Memoria{
 
     buscarVariable(nombre){
         return this.contenido.find(vari => vari.esEsteNombre(nombre))
+    }
+
+    mostrarMemoria(){
+        return this.contenido.map(value => value.mostrarVariable())
     }
 
 
@@ -37,7 +41,7 @@ class Variable{
         this.valor = valor
     }
 
-    valor(){
+    verValor(){
         return this.valor
     }
 
@@ -48,4 +52,7 @@ class Variable{
     reasignarValor(valor){
         this.valor = valor
     }
+    mostrarVariable(){
+        return this.nombre + ": " + this.valor
+   }
 }

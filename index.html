@@ -8,23 +8,41 @@
 </head>
 <body>
     <header>
-        <div>Hola</div>
+        <h1>Simulador de Threads (Experimental)</h1>
+        <label for="porcentaje">
+            Cambiar posibilidad
+        </label>
+        <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0">
+        
+       
     </header>
     <main>
         <section id="contenedorDeTexto">  
             <textarea name="codigo" id="codigo">global Int n = 0;
 
 Thread(2){
+print("antes de ejecutar")
 n = n + 1;
+print("despues de ejecutar")
 }
             </textarea>
             <button id="ejecutar">></button>
             
         </section>
         <section id="visual">
-            <div>Variables globales</div>
+            <div>
+                <h2 >Variables globales</h2>
+                <p id="variables"></p>
+            </div>
+            <div>
+
+            </div>
         </section>
+        
     </main>
+    <footer>
+        <div id="consola"></div>
+    </footer>
     <script type="module" src="/script.js"></script>
 </body>
 </html>   
