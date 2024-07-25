@@ -13,7 +13,7 @@ export default class Hilo{
     }
 
     ejecutarSiguienteInstruccion(estado){
-        this.ejecutarInstruccionActual()
+        this.ejecutarInstruccionActual(estado)
         if(this.bloque.length == 0){
             this.preparado = false
             console.log("final bloque")
@@ -26,9 +26,9 @@ export default class Hilo{
         }
     }
 
-    ejecutarInstruccionActual(){
+    ejecutarInstruccionActual(estado){
         console.log("ejecutado", this.proximaInstruccion,this)
-        this.proximaInstruccion.resolver(this)
+        this.proximaInstruccion.resolver(this,estado)
         
     }
 
@@ -36,22 +36,25 @@ export default class Hilo{
         return this.preparado
     }
 
-    resolverLectura(valor){
+    resolverLectura(valor, estado){
+        estado.informar(new Estado(this.id, "Lectura", `local.${valor} : ${this.memoriaCompartida.verValor(valor)}`   ))
         this.memoriaLocal.agregarVariable(valor, this.memoriaCompartida.verValor(valor))
     }
 
-    resolverSegunValorFijo(valor){
+    resolverSegunValorFijo(valor , estado){
         if(valor ==="}"){return}
         eval(valor)
     }
-    resolverConSuma(valor, valor1){
+    resolverConSuma(valor, valor1 , estado){
         
         let primerValor = valor.resolverPuro(this)
         let segundoValor = valor1.resolverPuro(this)
+        estado.informar(new Estado(this.id, "Operacion" , `local.OP : ${primerValor + segundoValor} (${primerValor} + ${segundoValor})`))
         this.memoriaLocal.agregarVariable("OP", primerValor + segundoValor )
     }
 
-    resolverEscritura(nombre, valor){
+    resolverEscritura(nombre, valor , estado){
+        estado.informar(new Estado(this.id, "Escritura" , `global.${nombre} : ${this.memoriaLocal.verValor("OP")}`))
         this.memoriaCompartida.agregarVariable(nombre, this.memoriaLocal.verValor("OP"))
     }
 
@@ -59,4 +62,25 @@ export default class Hilo{
         return this.memoriaLocal.verValor(nombre)
     }
 
+}
+
+
+class Estado{
+    constructor(idThread, operacion, texto){
+        this.thread = idThread
+        this.operacion = operacion
+        this.texto = texto
+    }
+
+    threadId(){
+        return this.thread
+    }
+    estiloDeOperacion(){
+        return this.operacion
+    }
+
+    desarrollo(){
+        return this.texto
+    }
+  
 }

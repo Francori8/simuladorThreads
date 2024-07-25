@@ -27,7 +27,7 @@ function ejecutarCodigo(){
     
     $("#variables").innerText = mem.mostrarMemoria().join(" ")
     // mostrar traza
-    estado.mostrarTraza()
+    $("#traza").innerHTML = estado.mostrarTraza().join("")
 
 }
 

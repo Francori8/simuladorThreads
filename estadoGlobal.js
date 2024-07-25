@@ -10,7 +10,12 @@ export default class EstadoGlobal{
     }
 
     mostrarTraza(){
-        console.log(this.estados)
+        return this.estados.map(value => `<div>
+                    <h3>TH : ${value.threadId()} </h3>
+                    <p>${value.estiloDeOperacion()}</p>
+                    <p>${value.desarrollo()}</p>
+            </div>`   )
+        
     }
 
     setProbabilidad(probabilidad){
@@ -24,7 +29,7 @@ export default class EstadoGlobal{
             this.mostrarEstados()
         }else{
             // thread bloquear el actual
-            
+
             threadPreaprados[0].ejecutarSiguienteInstruccion(this)
         }
     }
@@ -52,10 +57,3 @@ export default class EstadoGlobal{
 }
 
 
-
-class Estado{
-    constructor(idThread, operacion){
-        this.thread = idThread
-        this.operacion = operacion
-    }
-}

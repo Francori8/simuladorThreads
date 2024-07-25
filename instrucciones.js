@@ -16,7 +16,7 @@ export class Imprimir extends Instruccion{
         this.escritura = lugarAEscribir
     }
 
-    resolver(hilo){
+    resolver(hilo,estado){
         console.log(this)
         this.resuelto = true
         this.escritura.innerHTML += `<p>${this.valor}</p>`
@@ -34,13 +34,15 @@ export class Lectura extends Instruccion{
         this.valor = valor
     }
 
-    resolver(hilo){
-        console.log(this)
+    resolver(hilo,estado){
+        
         this.resuelto = true
-        hilo.resolverLectura(this.valor)
+        hilo.resolverLectura(this.valor , estado)
     }
 
     resolverPuro(hilo){
+        console.log(hilo)
+        console.log("4")
         return hilo.valorLocalDe(this.valor)
     }
 
@@ -55,13 +57,13 @@ export class Escritura extends Instruccion{
         this.valor = valor
     }
 
-    resolver(hilo){
+    resolver(hilo,estado){
         console.log(this)
         if(!this.valor.estaResuelto()){
-            this.valor.resolver(hilo)
+            this.valor.resolver(hilo,estado)
         }else{
             this.resuelto = true
-            hilo.resolverEscritura(this.nombre, this.valor)
+            hilo.resolverEscritura(this.nombre, this.valor , estado)
         }
     }
     
@@ -98,17 +100,17 @@ export class Sumar extends Instruccion{
         this.instruccion2 = instruccion2
     }
     resolverPuro(hilo){
-        return this.instruccion1.resolverPuro() + this.instruccion2.resolverPuro()
+        return this.instruccion1.resolverPuro(hilo) + this.instruccion2.resolverPuro(hilo)
     }
-    resolver(hilo){
+    resolver(hilo,estado){
         console.log(this)
         if(!this.instruccion1.estaResuelto()){
-            this.instruccion1.resolver(hilo)
+            this.instruccion1.resolver(hilo,estado)
         }else if(!this.instruccion2.estaResuelto()){
-            this.instruccion2.resolver(hilo)
+            this.instruccion2.resolver(hilo,estado)
         }else{
             this.resuelto = true
-            hilo.resolverConSuma(this.instruccion1,this.instruccion2)
+            hilo.resolverConSuma(this.instruccion1,this.instruccion2 , estado)
         }
     }
 }
@@ -121,10 +123,10 @@ export class ValorFijo extends Instruccion{
         
     }
 
-   resolver(hilo){
+   resolver(hilo,estado){
     console.log(this)
         this.resuelto = true
-        hilo.resolverSegunValorFijo(this.valor)
+        hilo.resolverSegunValorFijo(this.valor,estado)
         
     }
     resolverPuro(hilo){
