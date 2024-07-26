@@ -85,14 +85,11 @@ main{
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    
 }
 
 .seccionEscrita{
     display: flex;
-    
     flex-direction: column;
-    
 }
 
 .subtitulo{
