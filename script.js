@@ -1,6 +1,6 @@
 import Memoria from "./memoria.js"
 import Hilo  from "./hilos.js"
-import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura} from "./instrucciones.js"
+import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura , FinDeBloque} from "./instrucciones.js"
 import EstadoGlobal from "./estadoGlobal.js"
 
 
@@ -115,10 +115,18 @@ function instruccionSegunString(string,mem){
     }
     if(string.startsWith("print")){
         const imprimir = string.substring(5).replace("(","").replace(")","")
-        return new Imprimir(imprimir + " ", consola)
+        return new Imprimir(imprimir , consola)
     }
+    /*if(string.startsWith("if")){
+        
+        return
+    }*/
     if(mem.hayVariable(string)){
         return new Lectura(string)
+    }
+
+    if(string == "}"){
+        return new FinDeBloque
     }
     
     return new ValorFijo(string)

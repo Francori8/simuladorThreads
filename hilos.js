@@ -6,6 +6,7 @@ export default class Hilo{
         this.bloque = bloque
         this.proximaInstruccion = bloque.shift()
         this.preparado = true
+        this.contexto = this
     }
 
     conId(id){
@@ -16,7 +17,7 @@ export default class Hilo{
         this.ejecutarInstruccionActual(estado)
         if(this.bloque.length == 0){
             this.preparado = false
-            console.log("final bloque")
+            
             estado.decidirQuienSigue(this)
         }else{
             if(this.proximaInstruccion.estaResuelto()){
@@ -45,6 +46,9 @@ export default class Hilo{
         if(valor ==="}"){return}
         eval(valor)
     }
+    resolverConImprimir(valor, estado){
+        estado.informar(new Estado(this.id,"Imprimir",valor ) )
+    }
     resolverConSuma(valor, valor1 , estado){
         
         let primerValor = valor.resolverPuro(this)
@@ -54,8 +58,13 @@ export default class Hilo{
     }
 
     resolverEscritura(nombre, valor , estado){
-        estado.informar(new Estado(this.id, "Escritura" , `global.${nombre} : ${this.memoriaLocal.verValor("OP")}`))
-        this.memoriaCompartida.agregarVariable(nombre, this.memoriaLocal.verValor("OP"))
+        
+        estado.informar(new Estado(this.id, "Escritura" , `global.${nombre} : ${valor.resolverPuro(this)}`))
+        this.memoriaCompartida.agregarVariable(nombre, valor.resolverPuro(this))
+    }
+
+    resolverFinDeBloque(estado){
+        console.log("final bloque")
     }
 
     valorLocalDe(nombre){

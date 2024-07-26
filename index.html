@@ -13,37 +13,38 @@
             Cambiar posibilidad
         </label>
         <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0">
-        
-       
     </header>
     <main>
-        <section id="contenedorDeTexto">  
-            <textarea name="codigo" id="codigo">global Int n = 0
+        <section id="contenedorDeTexto">
+            <div class="contenedorCodigo">
+                    <textarea name="codigo" id="codigo">global Int n = 0
 
 Thread(2){
-print("antes de ejecutar")
-n = n + 1
-print("despues de ejecutar")
+    print(antes)
+    n = n + 1
+    print(despues)
 }
-            </textarea>
-            <button id="ejecutar">></button>
+                    </textarea>
+                    <button id="ejecutar">></button>
+            </div>
+            <div id="consola"></div>
             
         </section>
         <section id="visual">
-            <div>
-                <h2 >Variables globales</h2>
+            <div class="seccionEscrita">
+                <h2 class="subtitulo">Variables globales</h2>
                 <p id="variables"></p>
             </div>
 
-            <div>
-                <h2>Traza de Ejecucion</h2>
+            <div class="seccionEscrita">
+                <h2 class="subtitulo">Traza de Ejecucion</h2>
                 <div id="traza"></p>
             </div>
         </section>
         
     </main>
     <footer>
-        <div id="consola"></div>
+       
     </footer>
     <script type="module" src="script.js"></script>
 </body>

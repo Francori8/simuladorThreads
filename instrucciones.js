@@ -17,13 +17,13 @@ export class Imprimir extends Instruccion{
     }
 
     resolver(hilo,estado){
-        console.log(this)
         this.resuelto = true
         this.escritura.innerHTML += `<p>${this.valor}</p>`
+        hilo.resolverConImprimir(this.valor, estado)
     }
 
     resolverPuro(hilo){
-        this.escritura.innerHTML += `<p>${this.valor}</p>`
+         
     }
 }
 
@@ -41,11 +41,9 @@ export class Lectura extends Instruccion{
     }
 
     resolverPuro(hilo){
-        console.log(hilo)
-        console.log("4")
+        
         return hilo.valorLocalDe(this.valor)
     }
-
 
 }
 
@@ -73,24 +71,6 @@ export class Operacion extends Instruccion{
     
 }
 
-export class Asignacion extends Instruccion{
-    constructor(valor, instruccion){
-        super()
-        this.valor = valor
-        this.dato = instruccion
-    }
-
-
-    /*resolucion(memoria){
-        const valor = this.dato.resolucion()
-        this.hilo.informar("local" + this.valor + "=" + valor)
-        this.hilo.decidirQuienSigue(this)
-        this.hilo.informar(this.valor + "=" + valor)
-        memoria.agregarVariable(this.valor,valor)
-    }
-    */
-
-}
 
 export class Sumar extends Instruccion{
     constructor(instruccion1 , instruccion2){
@@ -100,7 +80,7 @@ export class Sumar extends Instruccion{
         this.instruccion2 = instruccion2
     }
     resolverPuro(hilo){
-        return this.instruccion1.resolverPuro(hilo) + this.instruccion2.resolverPuro(hilo)
+        return hilo.valorLocalDe("OP")
     }
     resolver(hilo,estado){
         console.log(this)
@@ -134,3 +114,16 @@ export class ValorFijo extends Instruccion{
     }
 }
 
+export class FinDeBloque extends Instruccion{
+    constructor(){
+        super()
+    }
+    resolver(hilo,estado){
+        hilo.resolverFinDeBloque(estado)
+    }
+
+    resolverPuro(hilo){
+
+    }
+
+}
