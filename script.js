@@ -1,6 +1,6 @@
 import Memoria from "./memoria.js"
 import Hilo  from "./hilos.js"
-import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura , FinDeBloque} from "./instrucciones.js"
+import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura, Igualdad , FinDeBloque, Condicional , Else} from "./instrucciones.js"
 import EstadoGlobal from "./estadoGlobal.js"
 
 
@@ -11,8 +11,6 @@ const consola = $("#consola")
 
 function cargar(){
     const btn = $("#ejecutar")
-    
-    
     btn.addEventListener("click", ejecutarCodigo)
 }
 
@@ -26,7 +24,6 @@ function ejecutarCodigo(){
     estado.resolver()
     
     $("#variables").innerText = mem.mostrarMemoria().join(" ")
-    // mostrar traza
     $("#traza").innerHTML = estado.mostrarTraza().join("")
 
 }
@@ -44,9 +41,7 @@ function parsearTexto(mem){
 
 function crearThreads(arrayTexto,mem){
     let idThread = 0
-    
     const arrayTextConRep = []
-
     arrayTexto.forEach(value => {
         const num = parseInt(value[0].substring(6).replace("(","").replace(")",""))
         for (let index = 0; index < num; index++) {
@@ -54,7 +49,6 @@ function crearThreads(arrayTexto,mem){
             
         }
     })
-
     return arrayTextConRep.map(value => 
         new Hilo( idThread++ ,  new Memoria(), mem, crearInstruccionCon(value.toSpliced(0,1),mem))
     )
@@ -91,6 +85,10 @@ function manejarMemoria(string,  mem){
         const vari = string.substring(6).replace(";","").split("=")
         mem.agregarVariable(vari[0] , vari[1])
     }
+    if(string.startsWith("Bool")){
+        const vari = string.substring(4).replace(";","").split("=")
+        mem.agregarVariable(vari[0], true && eval(vari[1]))
+    }
     if(string.startsWith("List")){
         const vari = string.substring(4).replace(";","").split("=")
         mem.agregarVariable(vari[0] , eval(vari[1]))
@@ -103,10 +101,26 @@ function crearInstruccionCon(instruccionesString,mem){
 }
 
 function instruccionSegunString(string,mem){
-    if(string.includes("=")){
+    
+    if(string.startsWith("if")){
+        const condicion = string.substring(2).replace("(","").replace(")","").replace("{","")
+        console.log(condicion)
+        return new Condicional(instruccionSegunString(condicion,mem))
+    }
+    if(string.includes("else")){
+        return new Else()
+    }
+    if(tieneUnSoloIgualNoSeguido(string) ){
         const asignacion = string.split("=")
-        console.log(asignacion)
-        return new Escritura(asignacion[0], instruccionSegunString(asignacion[1],mem))
+        console.log(asignacion,"=")
+        const variableAEscribir = asignacion.shift()
+        return new Escritura(variableAEscribir, instruccionSegunString(asignacion.join("="),mem))
+    }
+    if(tieneDosIgualesSeguidos(string)){
+        const asignacion = string.split("==")
+        console.log(asignacion, "==")
+        const variableAEscribir = asignacion.shift()
+        return new Igualdad(instruccionSegunString(variableAEscribir,mem), instruccionSegunString(asignacion[0] , mem))
     }
     if (string.includes("+")){
         const instruccion = string.split("+")        
@@ -115,16 +129,12 @@ function instruccionSegunString(string,mem){
     }
     if(string.startsWith("print")){
         const imprimir = string.substring(5).replace("(","").replace(")","")
-        return new Imprimir(imprimir , consola)
+        return new Imprimir(instruccionSegunString(imprimir,mem) , consola)
     }
-    /*if(string.startsWith("if")){
-        
-        return
-    }*/
+    
     if(mem.hayVariable(string)){
         return new Lectura(string)
     }
-
     if(string == "}"){
         return new FinDeBloque
     }
@@ -132,5 +142,27 @@ function instruccionSegunString(string,mem){
     return new ValorFijo(string)
 }
 
+
+function tieneUnSoloIgualNoSeguido(string){
+    let i = 0
+    let b = false
+    while(!b && string.length > i){
+            b = (string[i] == "=") 
+            i ++
+    }
+    
+    return b && (string[i] !="=") 
+}
+
+function tieneDosIgualesSeguidos(string){
+    let i = 0
+    let b = false
+    while(!b && string.length > i){
+            b = (string[i] == "=") 
+            i ++
+    }
+
+    return b && (string[i] == "=")
+}
 
 window.addEventListener("load", cargar)
