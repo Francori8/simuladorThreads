@@ -1,3 +1,5 @@
+import {Ciclo} from "./instrucciones.js"
+
 export default class Hilo{
     constructor(id,  cache, memoriaCompartida, bloque){
         this.id = id
@@ -38,12 +40,21 @@ export default class Hilo{
     }
 
     resolverLectura(valor, estado){
-        estado.informar(new Estado(this.id, "Lectura", `local.${valor} : ${this.memoriaCompartida.verValor(valor)}`   ))
-        this.memoriaLocal.agregarVariable(valor, this.memoriaCompartida.verValor(valor))
+        
+        let valorLectura
+        if(this.memoriaCompartida.hayVariable(valor)){
+                valorLectura = this.memoriaCompartida.verValor(valor)
+        }else{
+            valorLectura = this.memoriaLocal.verValor(valor)
+        }
+        
+        estado.informar(new Estado(this.id, "Lectura", `local.${valor} : ${valorLectura}`   ))
+        this.memoriaLocal.agregarVariable(valor, valorLectura)
     }
 
     resolverSegunValorFijo(valor , estado){
         if(valor ==="}"){return}
+        if(this.memoriaLocal.hayVariable(valor)){return this.memoriaLocal.verValor(valor)}
         eval(valor)
     }
     resolverConImprimir(valor, estado){
@@ -57,14 +68,22 @@ export default class Hilo{
         this.memoriaLocal.agregarVariable("OP", primerValor + segundoValor )
     }
 
+    resolverDeclaracionVariableLocal(valor,fmemoria,estado){
+        fmemoria(valor, this.memoriaLocal)
+    }
+
     resolverEscritura(nombre, valor , estado){
+        if(!this.memoriaCompartida.hayVariable(nombre)){
+            this.memoriaLocal.agregarVariable(nombre, valor.resolverPuro(this)) 
+        }else{
+            estado.informar(new Estado(this.id, "Escritura" , `global.${nombre} : ${valor.resolverPuro(this)}`))
+             this.memoriaCompartida.agregarVariable(nombre, valor.resolverPuro(this))
+        }
         
-        estado.informar(new Estado(this.id, "Escritura" , `global.${nombre} : ${valor.resolverPuro(this)}`))
-        this.memoriaCompartida.agregarVariable(nombre, valor.resolverPuro(this))
     }
 
     resolverConIgualdad(vIzquierdo, vDerecho, estado){
-        console.log(vIzquierdo, vDerecho)
+        
         const valorIzquierdo = vIzquierdo.resolverPuro(this)
         const valorDerecho = vDerecho.resolverPuro(this)
         estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo == valorDerecho} (${valorIzquierdo} == ${valorDerecho})`))
@@ -81,6 +100,24 @@ export default class Hilo{
 
     }
 
+    resolverWhile(condicion,maximo, estado){
+        if(condicion.resolverPuro(this)){
+            this.bloque.unshift( new Ciclo(condicion, this.instruccionesHastaElFinalDeBloque(), maximo)) 
+        }else{
+            this.borrarHastaFinDeBloqueDesde(0)
+        }
+       
+    }
+
+    resolverSeguirCiclo(condicion, ciclo,estado){
+        if(condicion.resolverPuro(this)){
+            ciclo.reiniciar()
+        }{
+            ciclo.terminado()
+            
+        }
+    }
+
     resolverFinDeBloque(estado){
         console.log("final bloque")
     }
@@ -91,6 +128,14 @@ export default class Hilo{
         }
 
         return this.memoriaLocal.verValor(nombre)
+    }
+
+    valorFijoSegun(valor){
+        if(this.memoriaLocal.hayVariable(valor)){
+            return this.memoriaLocal.verValor(valor)
+        }
+
+        return eval(valor)
     }
 
     borrarProximoCasoFalsoSiExiste(){
@@ -105,23 +150,26 @@ export default class Hilo{
         let i = indice
         let cantBloques = 1
         while(cantBloques > 0){
-            console.log(this.bloque[i])
+           
             if(this.bloque[i].esInstruccionConBloque()){
                 cantBloques ++
             }
             if(this.bloque[i].esElse() || this.bloque[i].esFinDeBloque() ){
                 cantBloques --
             }
-            console.log(cantBloques)
+           
             i++
         }
 
         return i
     }
 
+    instruccionesHastaElFinalDeBloque(){
+        return this.bloque.splice(0, this.indiceDelBloqueQueCierraActual(0))
+    }
+
 
     borrarHastaFinDeBloqueDesde(indice){
-    // caso borde de if adentro de else y probablemtne otros parecidos, no usar findIndex, buscarIndices por uno
         this.bloque.splice(indice , this.indiceDelBloqueQueCierraActual(indice))
     }
 

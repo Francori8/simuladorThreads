@@ -1,13 +1,36 @@
 import Memoria from "./memoria.js"
 import Hilo  from "./hilos.js"
-import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura, Igualdad , FinDeBloque, Condicional , Else} from "./instrucciones.js"
+import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura, Igualdad , FinDeBloque, Condicional , Else, DeclaracionVariableLocal, While} from "./instrucciones.js"
 import EstadoGlobal from "./estadoGlobal.js"
 
 
 const $ = arg => document.querySelector(arg)
 
 const consola = $("#consola") 
+//posible codigo para poner tabs al area texto
+/*
+$("textarea").keydown(function(e) {
+    if(e.keyCode === 9) { // tab was pressed
+        // get caret position/selection
+        var start = this.selectionStart;
+        var end = this.selectionEnd;
 
+        var $this = $(this);
+        var value = $this.val();
+
+        // set textarea value to: text before caret + tab + text after caret
+        $this.val(value.substring(0, start)
+                    + "\t"
+                    + value.substring(end));
+
+        // put caret at right position again (add one for the tab)
+        this.selectionStart = this.selectionEnd = start + 1;
+
+        // prevent the focus lose
+        e.preventDefault();
+    }
+});
+*/
 
 function cargar(){
     const btn = $("#ejecutar")
@@ -102,6 +125,16 @@ function crearInstruccionCon(instruccionesString,mem){
 
 function instruccionSegunString(string,mem){
     
+    if(string.startsWith("local")){
+        const stringAResolver = string.substring(5)
+        return new DeclaracionVariableLocal(stringAResolver , manejarMemoria)
+    }
+
+    if(string.startsWith("while")){
+        const stringAResolver = string.substring(5).replace("(","").replace(")","").replace("{","")
+        return new While(instruccionSegunString(stringAResolver, mem), 20)
+    }
+
     if(string.startsWith("if")){
         const condicion = string.substring(2).replace("(","").replace(")","").replace("{","")
         console.log(condicion)

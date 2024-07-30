@@ -10,6 +10,7 @@ export default class EstadoGlobal{
     }
 
     mostrarTraza(){
+        console.log(this.estados)
         return this.estados.map(value => `<div class="elementoTraza">
                     <h3 class="thread">TH : ${value.threadId()} </h3>
                     <div class="contenedorTraza">

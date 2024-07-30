@@ -1,3 +1,5 @@
+import { ListaCircular } from "./listaCircular.js"
+
 class Instruccion {
    constructor(){
     this.resuelto = false
@@ -14,9 +16,25 @@ class Instruccion {
     esFinDeBloque(){
         return false
     }
+    reiniciar(){
+        this.resuelto = false
+    }
 
     esInstruccionConBloque(){
         return false
+    }
+}
+
+export class DeclaracionVariableLocal extends Instruccion{
+    constructor(string, funcionAMemoria){
+        super()
+        this.escritura = string
+        this.funcion = funcionAMemoria
+    }
+
+    resolver(hilo,  estado){
+        this.resuelto = true
+        hilo.resolverDeclaracionVariableLocal( this.escritura, this.funcion,estado)
     }
 }
 
@@ -53,7 +71,6 @@ export class Lectura extends Instruccion{
     }
 
     resolverPuro(hilo){
-        
         return hilo.valorLocalDe(this.valor)
     }
 
@@ -64,6 +81,12 @@ export class Escritura extends Instruccion{
         super()
         this.nombre = nombre
         this.valor = valor
+    }
+
+    reiniciar(){
+        super.reiniciar()
+        this.valor.reiniciar()
+        
     }
 
     resolver(hilo,estado){
@@ -84,6 +107,13 @@ export class Igualdad extends Instruccion{
         this.valorIzquierdo = valorIzquierdo
         this.valorDerecho = valorDerecho
     }
+
+    reiniciar(){
+        super.reiniciar()
+        this.valorIzquierdo.reiniciar()
+        this.valorDerecho.reiniciar()
+    }
+
     resolver(hilo,estado){
         
         if(!this.valorIzquierdo.estaResuelto()){
@@ -109,6 +139,10 @@ export class Condicional extends Instruccion{
         
     }
 
+    reiniciar(){
+        this.condicion.reiniciar()
+    }
+
     resolver(hilo,estado){
         if(!this.condicion.estaResuelto()){
             this.condicion.resolver(hilo,estado)
@@ -118,9 +152,6 @@ export class Condicional extends Instruccion{
         }
     }
 
-    aplicarValorDeVerdad(bool){
-        this.valorDeVerdad = bool
-    }
 
 
     esInstruccionConBloque(){
@@ -128,6 +159,78 @@ export class Condicional extends Instruccion{
     }
     
     
+}
+
+export class Ciclo extends Instruccion{
+    constructor(condicion, bloque, maximo){
+        super()
+        this.condicion = condicion
+        this.bloque  = new ListaCircular(bloque)
+        this.maximo = maximo
+        this.resolviendo = false
+    
+    }
+
+    terminado(){
+        this.resuelto = true
+    }
+    reiniciar(){
+        this.condicion.reiniciar()
+        this.bloque.reiniciarTodos()
+    }
+
+    resolver(hilo, estado){
+
+        if(this.maximo === 0){
+            this.resuelto = true
+            // informar de maximas vueltas se llego
+            return
+        }
+
+        const siguienteInstruccion = this.bloque.siguienteElemento()
+        
+        if(siguienteInstruccion.estaResuelto()){
+            this.bloque.pasarElemento()
+            const proximaInstruccion = this.bloque.siguienteElemento()
+            if(proximaInstruccion.estaResuelto()){
+                if(!this.condicion.estaResuelto()){
+                    this.maximo--
+                    this.condicion.resolver(hilo,estado)
+                }else{
+                    hilo.resolverSeguirCiclo(this.condicion, this)
+                }
+            }
+           
+        }else{
+            
+            siguienteInstruccion.resolver(hilo,estado)
+        }
+         
+
+        
+    }
+
+}
+
+export class While extends Instruccion{
+    constructor(condicion, max){
+        super()
+        this.condicion = condicion
+        this.max = max
+    }
+    
+  
+    resolver(hilo,estado){
+        
+        if(!this.condicion.estaResuelto()){
+            this.condicion.resolver(hilo,estado)
+        }else{
+            this.resuelto = true
+            this.condicion.reiniciar()
+            hilo.resolverWhile(this.condicion,this.max,estado)
+        }
+    }
+
 }
 
 export class Else extends Instruccion{
@@ -159,6 +262,12 @@ export class Sumar extends Instruccion{
         this.instruccion1 = instruccion1
         this.instruccion2 = instruccion2
     }
+
+    reiniciar(){
+        super.reiniciar()
+        this.instruccion1.reiniciar()
+        this.instruccion2.reiniciar()
+    }
     resolverPuro(hilo){
         return hilo.valorLocalDe("OP")
     }
@@ -182,7 +291,7 @@ export class ValorFijo extends Instruccion{
         this.valor = valor
         
     }
-
+    
    resolver(hilo,estado){
     
         this.resuelto = true
@@ -190,7 +299,7 @@ export class ValorFijo extends Instruccion{
         
     }
     resolverPuro(hilo){
-        return eval(this.valor)
+        return hilo.valorFijoSegun(this.valor)
     }
 }
 
@@ -212,3 +321,6 @@ export class FinDeBloque extends Instruccion{
     }
 
 }
+
+
+

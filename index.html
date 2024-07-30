@@ -17,16 +17,18 @@
     <main>
         <section id="contenedorDeTexto">
             <div class="contenedorCodigo">
-                    <textarea name="codigo" id="codigo">global Int n = 0
+                    <textarea name="codigo" id="codigo">
+global Int n = 0
 
 Thread(2){
-        print("antes")
-        n = n + 1
-        print("despues")
+        
+       while( n == 1){
+         n = n + 1
+       }
     
 }
                     </textarea>
-                    <button id="ejecutar">></button>
+                    <button id="ejecutar">▶</button>
             </div>
             <div id="consola"></div>
             
