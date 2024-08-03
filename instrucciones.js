@@ -175,6 +175,8 @@ export class Ciclo extends Instruccion{
         this.resuelto = true
     }
     reiniciar(){
+        super.reiniciar()
+        this.maximo--
         this.condicion.reiniciar()
         this.bloque.reiniciarTodos()
     }
@@ -184,7 +186,8 @@ export class Ciclo extends Instruccion{
         if(this.maximo === 0){
             this.resuelto = true
             // informar de maximas vueltas se llego
-            return
+            hilo.resolverMaximoCiclos(estado)
+           return
         }
 
         const siguienteInstruccion = this.bloque.siguienteElemento()
@@ -194,7 +197,6 @@ export class Ciclo extends Instruccion{
             const proximaInstruccion = this.bloque.siguienteElemento()
             if(proximaInstruccion.estaResuelto()){
                 if(!this.condicion.estaResuelto()){
-                    this.maximo--
                     this.condicion.resolver(hilo,estado)
                 }else{
                     hilo.resolverSeguirCiclo(this.condicion, this)

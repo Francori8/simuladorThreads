@@ -21,8 +21,21 @@ header{
 main{
     display: flex;
     margin: 5px;
+    padding-top: 10px;
+    gap: 10px;
     height: 80%;
     width: 95%;   
+}
+
+button{
+    background-color: aliceblue;
+    padding: 4px 8px;
+}
+
+button:hover{
+    cursor: pointer;
+    transform: scale(105%);
+    color: brown;
 }
 
 #contenedorDeTexto{
@@ -37,11 +50,12 @@ main{
 }
 
 #consola{
-    margin: 10px;
+    margin-top:10px ;
     text-align: center;
     overflow-y: auto;
     height: 100px;
-
+    background: linear-gradient(to bottom right,rgb(104, 104, 104),  rgb(54, 54, 54));
+   
 }
 
 #codigo{
@@ -52,6 +66,8 @@ main{
 #ejecutar{
     width: 25px;
     height: 25px;
+    position: absolute;
+    right: 55%;
 }
 
 #traza{
@@ -96,5 +112,31 @@ main{
     text-align: center;
     font-weight: 100;
     color: whitesmoke;
+}
+
+.contenedor-datos{
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-around;
+}
+
+.contenedor{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+}
+
+.contenedor-generalRadios{
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+}
+
+.contenedor-radio{
+    display: flex;
+    flex-direction: column;
 }
 

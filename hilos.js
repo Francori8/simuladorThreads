@@ -22,7 +22,9 @@ export default class Hilo{
             this.preparado = false
             estado.decidirQuienSigue(this)
         }else{
+            console.log(this.proximaInstruccion.estaResuelto())
             if(this.proximaInstruccion.estaResuelto()){
+                
                 this.proximaInstruccion = this.bloque.shift()
             }
             estado.decidirQuienSigue(this)
@@ -109,10 +111,15 @@ export default class Hilo{
        
     }
 
+    resolverMaximoCiclos(estado){
+        estado.informarEstadoFinalizacionPorMaximoCiclos()
+    }
+
     resolverSeguirCiclo(condicion, ciclo,estado){
         if(condicion.resolverPuro(this)){
             ciclo.reiniciar()
-        }{
+        }else{
+
             ciclo.terminado()
             
         }

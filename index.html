@@ -9,10 +9,46 @@
 <body>
     <header>
         <h1>Simulador de Threads (Experimental)</h1>
-        <label for="porcentaje">
-            Cambiar posibilidad
-        </label>
-        <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0">
+        <div class="contenedor-datos">
+            <div class="contenedor">
+                <h4>Ejemplos</h4>
+                <div id="contenedorBotones" class="contenedorBotones">  
+                </div>
+            </div>
+
+            <div class="contenedor">
+                <h4>Cambiar posibilidad</h4>
+                <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0">
+            </div>
+            
+            <div class="contenedor">
+                <h4>Limite de Ciclos</h4>
+                <div class="contenedor-generalRadios">
+                    <div class="contenedor-radio">
+                        <label for="limite-5">5</label>
+                        <input type="radio" name="limite" id="limite-5"  value="5">
+                    </div>
+                    <div class="contenedor-radio">
+                        <label for="limite-10">10</label>
+                        <input type="radio" name="limite" id="limite-10"  value="10" checked>
+                    </div>
+                    <div class="contenedor-radio">
+                        <label for="limite-20">20</label>
+                        <input type="radio" name="limite" id="limite-20"  value="20">
+                    </div>
+                    <div class="contenedor-radio">
+                        <label for="limite-SinLimite">Sin Limite </label>
+                        <input type="radio" name="limite" id="limite-SinLimite"  value="-1">
+                    </div>
+                    
+                </div>
+            </div>
+            
+
+        </div>
+
+        
+        
     </header>
     <main>
         <section id="contenedorDeTexto">
@@ -46,9 +82,7 @@ Thread(2){
         </section>
         
     </main>
-    <footer>
-       
-    </footer>
+    
     <script type="module" src="./script.js"></script>
 </body>
 </html>   

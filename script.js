@@ -2,6 +2,7 @@ import Memoria from "./memoria.js"
 import Hilo  from "./hilos.js"
 import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura, Igualdad , FinDeBloque, Condicional , Else, DeclaracionVariableLocal, While} from "./instrucciones.js"
 import EstadoGlobal from "./estadoGlobal.js"
+import ejemplos from "./ejemplo.js"
 
 
 const $ = arg => document.querySelector(arg)
@@ -34,9 +35,14 @@ $("textarea").keydown(function(e) {
 
 function cargar(){
     const btn = $("#ejecutar")
+    crearBotones($("#contenedorBotones"), ejemplos , modificarTexto)
     btn.addEventListener("click", ejecutarCodigo)
 }
 
+function modificarTexto(e){
+    const idBtn = e.target.dataset.btnid 
+    $("#codigo").value = ejemplos.find(ej => ej.id == idBtn).texto
+}
 
 function ejecutarCodigo(){
     const mem = new Memoria()
@@ -54,7 +60,7 @@ function ejecutarCodigo(){
 const averiguarProbabilidad = () => {return $("#porcentaje").value * ((100/$("#porcentaje").max)/100) }
 
 function parsearTexto(mem){
-    const texto = $("#codigo").value.trim().replaceAll(" ", "").split("\n").filter(string => string  != "")
+    const texto = $("#codigo").value.trim().replaceAll(" ", "").replaceAll("\t","").split("\n").filter(string => string  != "")
     const global = texto.filter(string => string.startsWith("global")) 
     establecerMemoria(global,mem)
     const arrayConThreads = separarCadaThread(texto)
@@ -129,12 +135,10 @@ function instruccionSegunString(string,mem){
         const stringAResolver = string.substring(5)
         return new DeclaracionVariableLocal(stringAResolver , manejarMemoria)
     }
-
     if(string.startsWith("while")){
         const stringAResolver = string.substring(5).replace("(","").replace(")","").replace("{","")
-        return new While(instruccionSegunString(stringAResolver, mem), 20)
+        return new While(instruccionSegunString(stringAResolver, mem), $("input[name='limite']:checked").value)
     }
-
     if(string.startsWith("if")){
         const condicion = string.substring(2).replace("(","").replace(")","").replace("{","")
         console.log(condicion)
@@ -164,7 +168,6 @@ function instruccionSegunString(string,mem){
         const imprimir = string.substring(5).replace("(","").replace(")","")
         return new Imprimir(instruccionSegunString(imprimir,mem) , consola)
     }
-    
     if(mem.hayVariable(string)){
         return new Lectura(string)
     }
@@ -196,6 +199,20 @@ function tieneDosIgualesSeguidos(string){
     }
 
     return b && (string[i] == "=")
+}
+
+function crearBotones(contenedor, elementos, funcionOnClick){
+    const botonesHTML = elementos.map(val => {
+        return `<button data-btnid=${val.id} title="${val.razon}"> ${val.id}</button>`
+    })
+
+    botonesHTML.forEach(elemHtml => {
+        contenedor.innerHTML += elemHtml
+    })
+    contenedor.querySelectorAll("button").forEach(btn => {
+        btn.addEventListener("click", funcionOnClick)
+    })
+
 }
 
 window.addEventListener("load", cargar)

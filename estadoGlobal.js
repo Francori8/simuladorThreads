@@ -3,6 +3,7 @@ export default class EstadoGlobal{
         this.probabilidad = 0   
         this.estados = []
         this.threads = threads
+        this.finalizacion = new SinFinalizar
     }
 
     informar(estado){
@@ -21,6 +22,15 @@ export default class EstadoGlobal{
         
     }
 
+    informarEstadoFinalizacionPorMaximoCiclos(){
+        this.finalizacion = new FinalMaximoCiclo()
+    }
+
+    informarEstadoFinalizacionExitosa(){
+        this.finalizacion = new FinalExitoso()
+        console.log("fin ejecucion")
+    }
+
     setProbabilidad(probabilidad){
         this.probabilidad = probabilidad
     }
@@ -29,7 +39,7 @@ export default class EstadoGlobal{
         this.sortearSuerte()
         const threadPreaprados = this.threadPreparados()
         if(threadPreaprados.length == 0){
-            this.mostrarEstados()
+            this.informarEstadoFinalizacionExitosa()
         }else{
             // thread bloquear el actual
 
@@ -37,9 +47,7 @@ export default class EstadoGlobal{
         }
     }
 
-    mostrarEstados(){
-        console.log("fin ejecucion")
-    }
+    
 
     sortearSuerte(){
         this.threads.sort(() => Math.random() - this.probabilidad)
@@ -59,4 +67,28 @@ export default class EstadoGlobal{
 
 }
 
+
+class Estados{
+    constructor(){
+
+    }
+}
+
+class SinFinalizar extends Estados{
+    constructor(){
+        super()
+    }
+}
+
+class FinalMaximoCiclo extends Estados{
+    constructor(){
+        super()
+    }
+}
+
+class FinalExitoso extends Estados{
+    constructor(){
+        super()
+    }
+}
 
