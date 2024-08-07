@@ -1,6 +1,6 @@
 import Memoria from "./memoria.js"
 import Hilo  from "./hilos.js"
-import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura, Igualdad , FinDeBloque, Condicional , Else, DeclaracionVariableLocal, While} from "./instrucciones.js"
+import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura, Igualdad , FinDeBloque, Condicional , Else, DeclaracionVariableLocal, While, Mayor,MayorOIgual, Menor, MenorOIgual} from "./instrucciones.js"
 import EstadoGlobal from "./estadoGlobal.js"
 import ejemplos from "./ejemplo.js"
 
@@ -8,30 +8,28 @@ import ejemplos from "./ejemplo.js"
 const $ = arg => document.querySelector(arg)
 
 const consola = $("#consola") 
-//posible codigo para poner tabs al area texto
-/*
-$("textarea").keydown(function(e) {
-    if(e.keyCode === 9) { // tab was pressed
+
+$("textarea").addEventListener("keydown", agregarTab)
+
+function agregarTab(e) {
+    const tab = 9
+    if(e.keyCode === tab) { // 
         // get caret position/selection
-        var start = this.selectionStart;
-        var end = this.selectionEnd;
+        
+        const textArea = e.target
+        const inicio = textArea.selectionStart
+        const  final = textArea.selectionEnd
+        const valorAnterior = textArea.value
+        textArea.value = valorAnterior.substring(0,inicio) + "\t" + valorAnterior.substring(final) 
+        textArea.selectionStart = inicio + 1
+        textArea.selectionEnd = inicio + 1
 
-        var $this = $(this);
-        var value = $this.val();
-
-        // set textarea value to: text before caret + tab + text after caret
-        $this.val(value.substring(0, start)
-                    + "\t"
-                    + value.substring(end));
-
-        // put caret at right position again (add one for the tab)
-        this.selectionStart = this.selectionEnd = start + 1;
-
-        // prevent the focus lose
         e.preventDefault();
     }
-});
-*/
+};
+
+
+const averiguarProbabilidad = () => {return $("#porcentaje").value * ((100/$("#porcentaje").max)/100) }
 
 function cargar(){
     const btn = $("#ejecutar")
@@ -51,13 +49,10 @@ function ejecutarCodigo(){
     const estado = new EstadoGlobal(threads, mem)
     estado.setProbabilidad(averiguarProbabilidad())
     estado.resolver()
-    
     $("#variables").innerText = mem.mostrarMemoria().join(" ")
     $("#traza").innerHTML = estado.mostrarTraza().join("")
-
+    
 }
-
-const averiguarProbabilidad = () => {return $("#porcentaje").value * ((100/$("#porcentaje").max)/100) }
 
 function parsearTexto(mem){
     const texto = $("#codigo").value.trim().replaceAll(" ", "").replaceAll("\t","").split("\n").filter(string => string  != "")
@@ -147,15 +142,48 @@ function instruccionSegunString(string,mem){
     if(string.includes("else")){
         return new Else()
     }
-    if(tieneUnSoloIgualNoSeguido(string) ){
+
+    if(tieneEscritura(string) ){
         const asignacion = string.split("=")
-        console.log(asignacion,"=")
+
         const variableAEscribir = asignacion.shift()
         return new Escritura(variableAEscribir, instruccionSegunString(asignacion.join("="),mem))
     }
-    if(tieneDosIgualesSeguidos(string)){
+
+    if(string.includes("&&")){   
+        const condicones = string.split("&&")
+        const primeraCondicion = condicones.shift()
+        return new YLogico(instruccionSegunString(primeraCondicion , mem), instruccionSegunString(condicones.join("&&") , mem))
+    }
+    if(string.includes("||")){
+        const condicones = string.split("||")
+        const primeraCondicion = condicones.shift()
+        return new OLogico(instruccionSegunString(primeraCondicion , mem), instruccionSegunString(condicones.join("||") , mem))
+    }
+
+    if(string.includes(">=")){
+        const asignacion = string.split(">=")
+        const variableAEscribir = asignacion.shift()
+        return new MayorOIgual(instruccionSegunString(variableAEscribir,mem), instruccionSegunString(asignacion.join("") , mem))
+    }
+    if(string.includes("<=")){
+        const asignacion = string.split("<=")
+        const variableAEscribir = asignacion.shift()
+        return new MenorOIgual(instruccionSegunString(variableAEscribir,mem), instruccionSegunString(asignacion.join("") , mem))
+    }    
+    if(string.includes(">")){
+        const asignacion = string.split(">")
+        const variableAEscribir = asignacion.shift()
+        return new Mayor(instruccionSegunString(variableAEscribir,mem), instruccionSegunString(asignacion.join("") , mem))
+    }
+    if(string.includes("<")){
+        const asignacion = string.split("<")
+        const variableAEscribir = asignacion.shift()
+        return new Menor(instruccionSegunString(variableAEscribir,mem), instruccionSegunString(asignacion.join("") , mem))
+    }
+    if(string.includes("==")){
         const asignacion = string.split("==")
-        console.log(asignacion, "==")
+        
         const variableAEscribir = asignacion.shift()
         return new Igualdad(instruccionSegunString(variableAEscribir,mem), instruccionSegunString(asignacion[0] , mem))
     }
@@ -179,28 +207,6 @@ function instruccionSegunString(string,mem){
 }
 
 
-function tieneUnSoloIgualNoSeguido(string){
-    let i = 0
-    let b = false
-    while(!b && string.length > i){
-            b = (string[i] == "=") 
-            i ++
-    }
-    
-    return b && (string[i] !="=") 
-}
-
-function tieneDosIgualesSeguidos(string){
-    let i = 0
-    let b = false
-    while(!b && string.length > i){
-            b = (string[i] == "=") 
-            i ++
-    }
-
-    return b && (string[i] == "=")
-}
-
 function crearBotones(contenedor, elementos, funcionOnClick){
     const botonesHTML = elementos.map(val => {
         return `<button data-btnid=${val.id} title="${val.razon}"> ${val.id}</button>`
@@ -214,5 +220,22 @@ function crearBotones(contenedor, elementos, funcionOnClick){
     })
 
 }
+
+function tieneEscritura(string){
+    let i = 0
+    let b = false
+    while(!b && string.length > i){
+            if(string[i] == ">" || string[i] =="<" ){
+                break
+            }
+            b = (string[i] == "=") 
+            i ++
+    }
+    
+    return b && (string[i] !="=") 
+}
+
+
+
 
 window.addEventListener("load", cargar)

@@ -90,10 +90,37 @@ export default class Hilo{
         const valorDerecho = vDerecho.resolverPuro(this)
         estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo == valorDerecho} (${valorIzquierdo} == ${valorDerecho})`))
         this.memoriaLocal.agregarVariable("OP", valorIzquierdo == valorDerecho)
-    }   
+    }
+    
+    resolverConMayor(vIzquierdo, vDerecho,estado){
+        const valorIzquierdo = vIzquierdo.resolverPuro(this)
+        const valorDerecho = vDerecho.resolverPuro(this)
+        estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo > valorDerecho} (${valorIzquierdo} > ${valorDerecho})`))
+        this.memoriaLocal.agregarVariable("OP", valorIzquierdo > valorDerecho)
+    }
+
+    resolverMayorOIgualdad(vIzquierdo,vDerecho,estado){
+        const valorIzquierdo = vIzquierdo.resolverPuro(this)
+        const valorDerecho = vDerecho.resolverPuro(this)
+        estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo >= valorDerecho} (${valorIzquierdo} >= ${valorDerecho})`))
+        this.memoriaLocal.agregarVariable("OP", valorIzquierdo >= valorDerecho)    
+    }
+
+    resolverMenor(vIzquierdo,vDerecho,estado){
+        const valorIzquierdo = vIzquierdo.resolverPuro(this)
+        const valorDerecho = vDerecho.resolverPuro(this)
+        estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo < valorDerecho} (${valorIzquierdo} < ${valorDerecho})`))
+        this.memoriaLocal.agregarVariable("OP", valorIzquierdo < valorDerecho)    
+    }
+
+    resolverMenorOIgual(vIzquierdo,vDerecho,estado){
+        const valorIzquierdo = vIzquierdo.resolverPuro(this)
+        const valorDerecho = vDerecho.resolverPuro(this)
+        estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo <= valorDerecho} (${valorIzquierdo} <= ${valorDerecho})`))
+        this.memoriaLocal.agregarVariable("OP", valorIzquierdo <= valorDerecho)    
+    }
 
     resolverCondicional(condicion, estado){
-        
         if(condicion.resolverPuro(this) ){
                 this.borrarProximoCasoFalsoSiExiste()
         }else{

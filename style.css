@@ -22,10 +22,13 @@ main{
     display: flex;
     margin: 5px;
     padding-top: 10px;
+    flex-wrap: wrap;
     gap: 10px;
     height: 80%;
     width: 95%;   
 }
+
+
 
 button{
     background-color: aliceblue;
@@ -34,6 +37,7 @@ button{
 
 button:hover{
     cursor: pointer;
+    transition: all;
     transform: scale(105%);
     color: brown;
 }
@@ -42,7 +46,7 @@ button:hover{
     display: flex;
     flex-direction: column;
     width: 50%;
-    
+    min-width: 300px;
 }
 
 .contenedorCodigo{
@@ -54,12 +58,14 @@ button:hover{
     text-align: center;
     overflow-y: auto;
     height: 100px;
+    border: 1px dashed lightcyan;
     background: linear-gradient(to bottom right,rgb(104, 104, 104),  rgb(54, 54, 54));
    
 }
 
 #codigo{
     height: 400px;
+    padding: 5px;
     width: 100%;
 }
 

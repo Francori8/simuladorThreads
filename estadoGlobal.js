@@ -3,13 +3,15 @@ export default class EstadoGlobal{
         this.probabilidad = 0   
         this.estados = []
         this.threads = threads
-        this.finalizacion = new SinFinalizar
+        
     }
 
     informar(estado){
         this.estados.push(estado)
     }
-
+    mostrarEstadoDeFinalizacion(){
+        return this.finalizacion.estado()
+    }
     mostrarTraza(){
         console.log(this.estados)
         return this.estados.map(value => `<div class="elementoTraza">
@@ -23,12 +25,12 @@ export default class EstadoGlobal{
     }
 
     informarEstadoFinalizacionPorMaximoCiclos(){
-        this.finalizacion = new FinalMaximoCiclo()
+        console.log("Maximo ciclos alcanzado")
     }
 
     informarEstadoFinalizacionExitosa(){
-        this.finalizacion = new FinalExitoso()
-        console.log("fin ejecucion")
+        console.log("Finalizacion Exitosa")
+        
     }
 
     setProbabilidad(probabilidad){
@@ -67,28 +69,4 @@ export default class EstadoGlobal{
 
 }
 
-
-class Estados{
-    constructor(){
-
-    }
-}
-
-class SinFinalizar extends Estados{
-    constructor(){
-        super()
-    }
-}
-
-class FinalMaximoCiclo extends Estados{
-    constructor(){
-        super()
-    }
-}
-
-class FinalExitoso extends Estados{
-    constructor(){
-        super()
-    }
-}
 

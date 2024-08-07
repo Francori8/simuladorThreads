@@ -101,7 +101,7 @@ export class Escritura extends Instruccion{
     
 }
 
-export class Igualdad extends Instruccion{
+export class Comparacion extends Instruccion{
     constructor(valorIzquierdo, valorDerecho){
         super()
         this.valorIzquierdo = valorIzquierdo
@@ -122,12 +122,75 @@ export class Igualdad extends Instruccion{
             this.valorDerecho.resolver(hilo,estado)
         }else{
             this.resuelto = true
-            hilo.resolverConIgualdad(this.valorIzquierdo,this.valorDerecho , estado)
+            this.resolverSegunComparacion(hilo,estado)
+            
         }
     }
 
     resolverPuro(hilo){
         return hilo.valorLocalDe("OP")
+    }
+
+}
+
+export class MayorOIgual extends Comparacion{
+    constructor(valorIzquierdo, valorDerecho){
+        super(valorIzquierdo,valorDerecho)
+        
+    }
+
+    resolverSegunComparacion(hilo,estado){
+        hilo.resolverMayorOIgualdad(this.valorIzquierdo , this.valorDerecho ,estado)
+    }
+
+}
+
+export class Menor extends   Comparacion{
+    constructor(valorIzquierdo, valorDerecho){
+        super(valorIzquierdo,valorDerecho)
+        
+    }
+
+    resolverSegunComparacion(hilo,estado){
+        hilo.resolverMenor(this.valorIzquierdo , this.valorDerecho ,estado)
+    }
+
+}
+
+export class MenorOIgual extends  Comparacion{
+    constructor(valorIzquierdo, valorDerecho){
+        super(valorIzquierdo,valorDerecho)
+        
+    }
+
+    resolverSegunComparacion(hilo,estado){
+        hilo.resolverMenorOIgual(this.valorIzquierdo , this.valorDerecho ,estado)
+    }
+
+}
+
+export class Mayor extends Comparacion{
+    constructor(valorIzquierdo, valorDerecho){
+        super()
+        this.valorIzquierdo = valorIzquierdo
+        this.valorDerecho = valorDerecho
+    }
+
+
+    resolverSegunComparacion(hilo,estado){
+        hilo.resolverConMayor(this.valorIzquierdo,this.valorDerecho , estado)
+    }
+}
+
+export class Igualdad extends Comparacion{
+    constructor(valorIzquierdo, valorDerecho){
+        super()
+        this.valorIzquierdo = valorIzquierdo
+        this.valorDerecho = valorDerecho
+    }
+
+    resolverSegunComparacion(hilo,estado){
+        hilo.resolverConIgualdad(this.valorIzquierdo,this.valorDerecho , estado)
     }
 }
 
