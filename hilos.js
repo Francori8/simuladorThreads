@@ -10,6 +10,7 @@ export default class Hilo{
         this.proximaInstruccion = bloque.shift()
         this.preparado = true
         this.contexto = this
+        this.memoriaLocal.agregarVariable("OP", [])
     }
 
     conId(id){
@@ -67,7 +68,8 @@ export default class Hilo{
         let primerValor = valor.resolverPuro(this)
         let segundoValor = valor1.resolverPuro(this)
         estado.informar(new Estado(this.id, "OP arit" , `local.OP : ${primerValor + segundoValor} (${primerValor} + ${segundoValor})`))
-        this.memoriaLocal.agregarVariable("OP", primerValor + segundoValor )
+        this.memoriaLocal.verValor("OP").push(primerValor + segundoValor)
+        
     }
 
     resolverDeclaracionVariableLocal(valor,fmemoria,estado){
@@ -75,49 +77,64 @@ export default class Hilo{
     }
 
     resolverEscritura(nombre, valor , estado){
+        const valorAEscribir = valor.resolverPuro(this)
+        
         if(!this.memoriaCompartida.hayVariable(nombre)){
-            this.memoriaLocal.agregarVariable(nombre, valor.resolverPuro(this)) 
+            this.memoriaLocal.agregarVariable(nombre, valorAEscribir) 
         }else{
-            estado.informar(new Estado(this.id, "Escritura" , `global.${nombre} : ${valor.resolverPuro(this)}`))
-             this.memoriaCompartida.agregarVariable(nombre, valor.resolverPuro(this))
+            estado.informar(new Estado(this.id, "Escritura" , `global.${nombre} : ${valorAEscribir}`))
+             this.memoriaCompartida.agregarVariable(nombre, valorAEscribir)
         }
         
     }
 
     resolverConIgualdad(vIzquierdo, vDerecho, estado){
-        
         const valorIzquierdo = vIzquierdo.resolverPuro(this)
         const valorDerecho = vDerecho.resolverPuro(this)
         estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo == valorDerecho} (${valorIzquierdo} == ${valorDerecho})`))
-        this.memoriaLocal.agregarVariable("OP", valorIzquierdo == valorDerecho)
+        this.memoriaLocal.verValor("OP").push( valorIzquierdo == valorDerecho)
     }
     
     resolverConMayor(vIzquierdo, vDerecho,estado){
         const valorIzquierdo = vIzquierdo.resolverPuro(this)
         const valorDerecho = vDerecho.resolverPuro(this)
         estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo > valorDerecho} (${valorIzquierdo} > ${valorDerecho})`))
-        this.memoriaLocal.agregarVariable("OP", valorIzquierdo > valorDerecho)
+        this.memoriaLocal.verValor("OP").push( valorIzquierdo > valorDerecho)
     }
 
     resolverMayorOIgualdad(vIzquierdo,vDerecho,estado){
         const valorIzquierdo = vIzquierdo.resolverPuro(this)
         const valorDerecho = vDerecho.resolverPuro(this)
         estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo >= valorDerecho} (${valorIzquierdo} >= ${valorDerecho})`))
-        this.memoriaLocal.agregarVariable("OP", valorIzquierdo >= valorDerecho)    
+        this.memoriaLocal.verValor("OP").push( valorIzquierdo >= valorDerecho)    
     }
 
     resolverMenor(vIzquierdo,vDerecho,estado){
         const valorIzquierdo = vIzquierdo.resolverPuro(this)
         const valorDerecho = vDerecho.resolverPuro(this)
         estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo < valorDerecho} (${valorIzquierdo} < ${valorDerecho})`))
-        this.memoriaLocal.agregarVariable("OP", valorIzquierdo < valorDerecho)    
+        this.memoriaLocal.verValor("OP").push( valorIzquierdo < valorDerecho)    
     }
 
     resolverMenorOIgual(vIzquierdo,vDerecho,estado){
         const valorIzquierdo = vIzquierdo.resolverPuro(this)
         const valorDerecho = vDerecho.resolverPuro(this)
         estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo <= valorDerecho} (${valorIzquierdo} <= ${valorDerecho})`))
-        this.memoriaLocal.agregarVariable("OP", valorIzquierdo <= valorDerecho)    
+        this.memoriaLocal.verValor("OP").push( valorIzquierdo <= valorDerecho)    
+    }
+
+    resolverYLogico(vIzquierdo,vDerecho,estado){
+        const valorIzquierdo = vIzquierdo.resolverPuro(this)
+        const valorDerecho = vDerecho.resolverPuro(this)
+        estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo && valorDerecho} (${valorIzquierdo} && ${valorDerecho})`))
+        this.memoriaLocal.verValor("OP").push( valorIzquierdo && valorDerecho)    
+    }
+
+    resolverOLogico(vIzquierdo,vDerecho,estado){
+        const valorIzquierdo = vIzquierdo.resolverPuro(this)
+        const valorDerecho = vDerecho.resolverPuro(this)
+        estado.informar(new Estado(this.id, "OP bool", `local.OP : ${valorIzquierdo || valorDerecho} (${valorIzquierdo} || ${valorDerecho})`))
+        this.memoriaLocal.verValor("OP").push( valorIzquierdo ||  valorDerecho)    
     }
 
     resolverCondicional(condicion, estado){
@@ -159,6 +176,9 @@ export default class Hilo{
     valorLocalDe(nombre){
         if(!this.memoriaLocal.hayVariable(nombre)){
             return this.memoriaCompartida.verValor(nombre)
+        }
+        if(nombre === "OP"){
+            return this.memoriaLocal.verValor("OP").shift()
         }
 
         return this.memoriaLocal.verValor(nombre)

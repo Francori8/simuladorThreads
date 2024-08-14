@@ -72,8 +72,8 @@ button:hover{
 #ejecutar{
     width: 25px;
     height: 25px;
-    position: absolute;
-    right: 55%;
+    position: relative;
+    right: 44px;
 }
 
 #traza{

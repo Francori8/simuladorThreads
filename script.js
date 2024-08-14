@@ -1,6 +1,6 @@
 import Memoria from "./memoria.js"
 import Hilo  from "./hilos.js"
-import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura, Igualdad , FinDeBloque, Condicional , Else, DeclaracionVariableLocal, While, Mayor,MayorOIgual, Menor, MenorOIgual} from "./instrucciones.js"
+import { Sumar ,Imprimir , ValorFijo , Escritura, Lectura, Igualdad , FinDeBloque, Condicional , Else, DeclaracionVariableLocal, While, Mayor,MayorOIgual, Menor, MenorOIgual, YLogico, OLogico} from "./instrucciones.js"
 import EstadoGlobal from "./estadoGlobal.js"
 import ejemplos from "./ejemplo.js"
 

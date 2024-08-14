@@ -100,6 +100,56 @@ export class Escritura extends Instruccion{
     }
     
 }
+class OperacionBooleana extends Instruccion{
+    constructor(valorIzquierdo, valorDerecho){
+        super()
+        this.valorIzquierdo = valorIzquierdo
+        this.valorDerecho = valorDerecho
+    }
+
+    reiniciar(){
+        super.reiniciar()
+        this.valorIzquierdo.reiniciar()
+        this.valorDerecho.reiniciar()
+    }
+
+    resolver(hilo,estado){
+        
+        if(!this.valorIzquierdo.estaResuelto()){
+            this.valorIzquierdo.resolver(hilo,estado)
+        }else if(!this.valorDerecho.estaResuelto()){
+            this.valorDerecho.resolver(hilo,estado)
+        }else{
+            this.resuelto = true
+            this.resolverSegunOperacion(hilo,estado)
+            
+        }
+    }
+
+    resolverPuro(hilo){
+        return hilo.valorLocalDe("OP")
+    }
+}
+
+export class YLogico extends OperacionBooleana{
+    constructor(valorIzquierdo, valorDerecho){
+        super(valorIzquierdo,valorDerecho)
+    }
+    
+    resolverSegunOperacion(hilo, estado){
+        hilo.resolverYLogico(this.valorIzquierdo , this.valorDerecho ,estado)
+    }
+}
+
+export class OLogico extends OperacionBooleana{
+    constructor(valorIzquierdo, valorDerecho){
+        super(valorIzquierdo,valorDerecho)
+    }
+    
+    resolverSegunOperacion(hilo, estado){
+        hilo.resolverOLogico(this.valorIzquierdo , this.valorDerecho ,estado)
+    }
+}
 
 export class Comparacion extends Instruccion{
     constructor(valorIzquierdo, valorDerecho){
