@@ -1,148 +1,405 @@
-*{
-    margin: 0 ;
-    padding: 0;
-    box-sizing: content-box;
+:root {
+  --color-fondo: #23272f;
+  --color-fondo-secundario: #2d323c;
+  --color-texto: #f5f6fa;
+  --color-primario: #00b894;
+  --color-secundario: #6366f1;
+  --color-acento: #0984e3;
 }
 
-body{
-    background-color: rgb(54, 54, 54);
-    color: white;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Fondo y fuente general */
+body {
+  background-color: #23272f;
+  color: #f5f6fa;
+  width: 100%;
+  min-height: 100vh;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* Header */
+header {
+  margin: 10px 0 20px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+header h1 {
+  font-size: 2.2rem;
+  color: #00b894;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 8px #000a;
+}
+
+/* Main layout */
+main {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 10px;
+  padding-top: 10px;
+  gap: 20px;
+}
+
+/* Secciones visuales */
+#contenedorDeTexto,
+#visual {
+  background: #2d323c;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #0003;
+  padding: 18px;
+  margin-bottom: 20px;
+  flex: 1 1 350px;
+  min-width: 320px;
+}
+
+/* Agrupa controles en una sola línea, pero cada control es columna */
+.barra-controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 36px; /* Aumenta el espacio entre columnas */
+  margin-bottom: 12px;
+  background: #2d323c;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #0003;
+  padding: 12px 18px;
+}
+
+.control-columna {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 90px;
+  gap: 12px;
+  margin-bottom: 0;
+  background: #23272f;
+  border-radius: 8px;
+  padding: 20px 20px;
+  margin-bottom: 0;
+  box-shadow: 0 1px 4px #0001;
+}
+
+.control-columna label {
+  align-items: center;
+  margin-bottom: 2px;
+  font-size: 0.98rem;
+  color: #b2bec3;
+}
+
+.control-columna input[type="range"],
+.control-columna input[type="number"],
+.control-columna input[type="radio"] {
+  margin-bottom: 0;
+  margin-top: 2px;
+  min-width: 80px;
+  max-width: 120px;
+}
+
+/* Textarea de código */
+textarea,
+#codigo {
+  width: 100%;
+  min-height: 320px;
+  background: #181c22;
+  color: #e1e1e1;
+  border: 1.5px solid #00b894;
+  border-radius: 8px;
+  font-family: "Fira Mono", "Consolas", monospace;
+  font-size: 1.1rem;
+  padding: 12px;
+  margin-bottom: 12px;
+  resize: vertical;
+  transition: border 0.2s;
+}
+
+textarea:focus,
+#codigo:focus {
+  border: 2px solid #0984e3;
+  outline: none;
+}
+
+/* Botones */
+button {
+  background-color: #00b894;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 22px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin: 8px 0;
+  box-shadow: 0 2px 8px #0002;
+  transition: background 0.2s, transform 0.1s;
+}
+
+button:hover,
+button:focus {
+  background: linear-gradient(90deg, #00b894 10%, #0984e3 100%);
+  transform: translateY(-2px) scale(1.04);
+  outline: none;
+}
+
+.ejemplo-botones {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.ejemplo-btn {
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 18px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #0002;
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  outline: none;
+}
+
+.ejemplo-btn:hover,
+.ejemplo-btn:focus {
+  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 4px 16px #00b89444;
+}
+
+/* Radios y sliders personalizados */
+input[type="radio"],
+input[type="range"] {
+  accent-color: #00b894;
+}
+
+.contenedor-generalRadios,
+.contenedor-radio {
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+label {
+  font-size: 1rem;
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+/* Consola de salida */
+#consola {
+  background: #181c22;
+  color: #f5f6fa;
+  border: 1.5px solid #636e72;
+  border-radius: 8px;
+  min-height: 160px;
+  margin: 18px 10px 0 10px;
+  padding: 14px;
+  font-family: "Fira Mono", "Consolas", monospace;
+  font-size: 1rem;
+  overflow-y: auto;
+  box-shadow: 0 2px 8px #0002;
+}
+
+/* Visualización y traza */
+#visual {
+  min-height: 200px;
+}
+
+#traza {
+  margin-top: 10px;
+  background: #23272f;
+  border-radius: 8px;
+  padding: 10px;
+  font-family: "Fira Mono", "Consolas", monospace;
+  font-size: 1rem;
+  overflow-x: auto;
+  box-shadow: 0 2px 8px #0001;
+}
+
+.elementoTraza {
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: #353b48;
+  color: #00cec9;
+  font-family: "Fira Mono", "Consolas", monospace;
+  font-size: 1rem;
+  transition: background 0.2s;
+}
+
+.elementoTraza.actual {
+  background: #00b894;
+  color: #23272f;
+  font-weight: bold;
+}
+
+.contenedorTraza {
+  margin-top: 10px;
+  padding: 8px;
+  background: #23272f;
+  border-radius: 8px;
+}
+
+/* Secciones y subtítulos */
+.seccionEscrita {
+  margin-bottom: 18px;
+  padding: 10px;
+  background: #23272f;
+  border-radius: 8px;
+}
+
+.subtitulo {
+  font-size: 1.2rem;
+  color: #00b894;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+/* Datos y bloques */
+.contenedor-datos,
+.contenedor,
+.contenedorCodigo {
+  margin-bottom: 14px;
+  padding: 10px;
+  background: #23272f;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px #0001;
+}
+
+/* Mejor separación visual */
+#contenedorDeTexto {
+  margin-right: 20px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  main {
+    flex-direction: column;
+    gap: 0;
+  }
+  #contenedorDeTexto,
+  #visual {
+    min-width: 0;
     width: 100%;
-    height: 99vh;
-}
-header{
-    margin: 5px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-    gap: 10px;
-}
-main{
-    display: flex;
-    margin: 5px;
-    padding-top: 10px;
-    flex-wrap: wrap;
-    gap: 10px;
-    height: 80%;
-    width: 95%;   
+    margin-right: 0;
+  }
+  #consola {
+    margin: 18px 0 0 0;
+  }
 }
 
-
-
-button{
-    background-color: aliceblue;
-    padding: 4px 8px;
+/* Spinner para feedback visual (puedes mostrarlo con JS cuando ejecutes) */
+.spinner {
+  border: 4px solid #23272f;
+  border-top: 4px solid #00b894;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  animation: spin 1s linear infinite;
+  margin: 20px auto;
+  display: block;
+}
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-button:hover{
-    cursor: pointer;
-    transition: all;
-    transform: scale(105%);
-    color: brown;
+.limite-ciclos-opciones {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+}
+.limite-ciclos-opciones input[type="radio"] {
+  display: none;
+}
+.limite-ciclos-opciones label {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: #353b48;
+  color: #00cec9;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  border: 2px solid transparent;
+  user-select: none;
+}
+.limite-ciclos-opciones input[type="radio"]:checked + label {
+  background: #00b894;
+  color: #23272f;
+  border: 2px solid #0984e3;
+  box-shadow: 0 2px 8px #00b89444;
+}
+.limite-ciclos-opciones label:hover {
+  background: #0984e3;
+  color: #fff;
 }
 
-#contenedorDeTexto{
-    display: flex;
-    flex-direction: column;
-    width: 50%;
-    min-width: 300px;
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 120px;
+  height: 6px;
+  background: #353b48;
+  border-radius: 4px;
+  outline: none;
+  transition: background 0.2s;
+  margin-top: 4px;
 }
-
-.contenedorCodigo{
-    display: flex;
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #00b894;
+  border: 2px solid #0984e3;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #00b89444;
+  transition: background 0.2s, border 0.2s;
 }
-
-#consola{
-    margin-top:10px ;
-    text-align: center;
-    overflow-y: auto;
-    height: 100px;
-    border: 1px dashed lightcyan;
-    background: linear-gradient(to bottom right,rgb(104, 104, 104),  rgb(54, 54, 54));
-   
+input[type="range"]:focus::-webkit-slider-thumb {
+  background: #0984e3;
+  border: 2px solid #00b894;
 }
-
-#codigo{
-    height: 400px;
-    padding: 5px;
-    width: 100%;
+input[type="range"]::-ms-fill-lower,
+input[type="range"]::-ms-fill-upper {
+  background: #353b48;
 }
-
-#ejecutar{
-    width: 25px;
-    height: 25px;
-    position: relative;
-    right: 44px;
+input[type="range"]:focus {
+  outline: none;
 }
-
-#traza{
-    padding-right: 10px;
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #00b894;
+  border: 2px solid #0984e3;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #00b89444;
+  transition: background 0.2s, border 0.2s;
 }
-
-#visual{
-    width: 40%;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+input[type="range"]:focus::-moz-range-thumb {
+  background: #0984e3;
+  border: 2px solid #00b894;
 }
-
-#traza{
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    height: 400px;
-    overflow-y: auto;
+input[type="range"]::-ms-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #00b894;
+  border: 2px solid #0984e3;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #00b89444;
+  transition: background 0.2s, border 0.2s;
 }
-
-.elementoTraza{
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.contenedorTraza{
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.seccionEscrita{
-    display: flex;
-    flex-direction: column;
-}
-
-.subtitulo{
-    text-align: center;
-    font-weight: 100;
-    color: whitesmoke;
-}
-
-.contenedor-datos{
-    display: flex;
-    flex-direction: row;
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: space-around;
-}
-
-.contenedor{
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    align-items: center;
-}
-
-.contenedor-generalRadios{
-    display: flex;
-    flex-direction: row;
-    gap: 20px;
-}
-
-.contenedor-radio{
-    display: flex;
-    flex-direction: column;
-}
-
