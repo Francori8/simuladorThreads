@@ -35,4 +35,10 @@ export default [
       "global Int n = 0\n\nThread(1){\n\twhile( n < 2 ){\n\t\tprint(n)\n\t}\n}\n\nThread(1){\n\tn = n + 1\n\tn = n + 1\n}\n}",
     razon: "Ejemplo de while y suma sin resta",
   },
+  {
+    id: 6,
+    texto:
+      "global Int n = 0\n\nThread(2){\n\trepeat(3){\n\t\tn = n + 1\n\t}\n}",
+    razon: "Ejemplo de repeat: 2 threads incrementan n 3 veces cada uno",
+  },
 ];

@@ -21,6 +21,7 @@ import {
   MenorOIgual,
   YLogico,
   OLogico,
+  Repeat,
 } from "./instrucciones.js";
 
 export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
@@ -112,6 +113,10 @@ function instruccionSegunString(string, mem, consola, limiteRepeticiones) {
       instruccionSegunString(condicion, mem, consola, limiteRepeticiones),
       limiteRepeticiones
     );
+  }
+  if (string.startsWith("repeat")) {
+    const argumento = string.substring(6).replace("(", "").replace(")", "").replace("{", "");
+    return new Repeat(instruccionSegunString(argumento, mem, consola, limiteRepeticiones), limiteRepeticiones);
   }
   if (string.startsWith("if")) {
     const condicion = string.substring(2).replace("(", "").replace(")", "").replace("{", "");

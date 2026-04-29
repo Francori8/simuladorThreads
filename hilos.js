@@ -1,4 +1,4 @@
-import { Ciclo } from "./instrucciones.js";
+import { Ciclo, CicloRepeat } from "./instrucciones.js";
 
 export default class Hilo {
   constructor(id, cache, memoriaCompartida, bloque) {
@@ -9,6 +9,7 @@ export default class Hilo {
     this.proximaInstruccion = bloque.shift();
     this.preparado = true;
     this.estadoGlobal = null;
+    this._contexto = [];
   }
 
   setEstadoGlobal(estadoGlobal) {
@@ -50,9 +51,13 @@ export default class Hilo {
     }
   }
 
+  pushContexto(instruccion) { this._contexto.push(instruccion); }
+  popContexto() { this._contexto.pop(); }
+
   informar(tipo, detalle) {
+    const ctx = this._contexto.length > 0 ? this._contexto.at(-1) : this.proximaInstruccion;
     this.estadoGlobal.informar(
-      new Estado(this.id, tipo, detalle, this.proximaInstruccion?.toString() || "")
+      new Estado(this.id, tipo, detalle, ctx?.toString() || "")
     );
   }
 
@@ -80,6 +85,16 @@ export default class Hilo {
       this.bloque.unshift(
         new Ciclo(condicion, this.instruccionesHastaElFinalDeBloque(), maximo)
       );
+    } else {
+      this.borrarHastaFinDeBloqueDesde(0);
+    }
+  }
+
+  resolverRepeat(n, maximo) {
+    if (n > 0) {
+      const ciclo = new CicloRepeat(this.instruccionesHastaElFinalDeBloque(), maximo);
+      ciclo.iniciar(n);
+      this.bloque.unshift(ciclo);
     } else {
       this.borrarHastaFinDeBloqueDesde(0);
     }

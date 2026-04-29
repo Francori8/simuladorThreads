@@ -276,13 +276,17 @@ export class Ciclo extends Instruccion {
       const proxima = this.bloque.siguienteElemento();
       if (proxima.estaResuelto()) {
         if (!this.condicion.estaResuelto()) {
+          hilo.pushContexto(this.condicion);
           this.condicion.resolver(hilo);
+          hilo.popContexto();
         } else {
           hilo.resolverSeguirCiclo(this.condicion.resolverPuro(), this);
         }
       }
     } else {
+      hilo.pushContexto(siguiente);
       siguiente.resolver(hilo);
+      hilo.popContexto();
     }
   }
 
@@ -321,4 +325,72 @@ export class FinDeBloque extends Instruccion {
   resolver(hilo) { this.resuelto = true; }
   esFinDeBloque() { return true; }
   toString() { return `}`; }
+}
+
+// Bloque interno del repeat: recibe el conteo ya evaluado y va decrementando
+export class CicloRepeat extends Instruccion {
+  constructor(bloque, maximo) {
+    super();
+    this.bloque = new ListaCircular(bloque);
+    this.contador = 0;
+    this.maximo = maximo;
+  }
+
+  iniciar(n) { this.contador = n; }
+  terminado() { this.resuelto = true; }
+
+  reiniciar() {
+    super.reiniciar();
+    this.contador--;
+    this.maximo--;
+    this.bloque.reiniciarTodos();
+  }
+
+  resolver(hilo) {
+    if (this.maximo === 0) {
+      this.resuelto = true;
+      hilo.resolverMaximoCiclos();
+      return;
+    }
+    if (this.contador <= 0) {
+      this.resuelto = true;
+      return;
+    }
+
+    const siguiente = this.bloque.siguienteElemento();
+
+    if (siguiente.estaResuelto()) {
+      this.bloque.pasarElemento();
+      const proxima = this.bloque.siguienteElemento();
+      if (proxima.estaResuelto()) {
+        this.reiniciar();
+      }
+    } else {
+      hilo.pushContexto(siguiente);
+      siguiente.resolver(hilo);
+      hilo.popContexto();
+    }
+  }
+
+  toString() { return `repeat(${this.contador}) { ... }`; }
+}
+
+export class Repeat extends Instruccion {
+  constructor(cantidadExpr, max) {
+    super();
+    this.cantidadExpr = cantidadExpr;
+    this.max = max;
+  }
+
+  resolver(hilo) {
+    if (!this.cantidadExpr.estaResuelto()) {
+      this.cantidadExpr.resolver(hilo);
+    } else {
+      const n = this.cantidadExpr.resolverPuro();
+      hilo.resolverRepeat(n, this.max);
+      this.resuelto = true;
+    }
+  }
+
+  toString() { return `repeat(${this.cantidadExpr.toString()}) { ... }`; }
 }
