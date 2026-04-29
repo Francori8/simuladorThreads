@@ -70,17 +70,24 @@ Thread(2){
         </div>
       </section>
       <section id="visual">
-        <div class="seccionEscrita">
-          <h2 class="subtitulo">Variables globales</h2>
-          <p id="variables"></p>
+        <div id="panel-salida">
+          <div class="seccionEscrita">
+            <h2 class="subtitulo">Variables globales</h2>
+            <p id="variables"></p>
+          </div>
+          <div class="seccionEscrita">
+            <h2 class="subtitulo">Consola</h2>
+            <div id="consola"></div>
+          </div>
         </div>
-        <div class="seccionEscrita">
-          <h2 class="subtitulo">Traza de Ejecución</h2>
-          <div id="traza"></div>
+        <div id="panel-traza">
+          <div class="seccionEscrita">
+            <h2 class="subtitulo">Traza de Ejecución</h2>
+            <div id="traza"></div>
+          </div>
         </div>
       </section>
     </main>
-    <div id="consola"></div>
     <script type="module" src="./script.js"></script>
   </body>
 </html>

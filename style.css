@@ -199,8 +199,9 @@ label {
   color: #f5f6fa;
   border: 1.5px solid #636e72;
   border-radius: 8px;
-  min-height: 160px;
-  margin: 18px 10px 0 10px;
+  min-height: 80px;
+  max-height: 200px;
+  margin-top: 10px;
   padding: 14px;
   font-family: "Fira Mono", "Consolas", monospace;
   font-size: 1rem;
@@ -210,7 +211,22 @@ label {
 
 /* Visualización y traza */
 #visual {
-  min-height: 200px;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+#panel-salida {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#panel-traza {
+  flex: 1;
+  min-width: 0;
 }
 
 #traza {
@@ -221,6 +237,8 @@ label {
   font-family: "Fira Mono", "Consolas", monospace;
   font-size: 1rem;
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 60vh;
   box-shadow: 0 2px 8px #0001;
 }
 
@@ -291,8 +309,11 @@ label {
     width: 100%;
     margin-right: 0;
   }
-  #consola {
-    margin: 18px 0 0 0;
+  #visual {
+    flex-direction: column;
+  }
+  #panel-salida {
+    flex: none;
   }
 }
 

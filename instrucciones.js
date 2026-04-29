@@ -5,97 +5,141 @@ class Instruccion {
     this.resuelto = false;
   }
 
-  estaResuelto() {
-    return this.resuelto;
-  }
+  estaResuelto() { return this.resuelto; }
+  esElse() { return false; }
+  esFinDeBloque() { return false; }
+  reiniciar() { this.resuelto = false; }
+  esInstruccionConBloque() { return false; }
 
-  esElse() {
-    return false;
-  }
-
-  esFinDeBloque() {
-    return false;
-  }
-  reiniciar() {
-    this.resuelto = false;
-  }
-
-  esInstruccionConBloque() {
-    return false;
-  }
-
-  // Obliga a las subclases a implementar toString()
   toString() {
-    throw new Error(
-      "Debes implementar toString() en la subclase de Instruccion"
-    );
+    throw new Error("Debes implementar toString() en la subclase de Instruccion");
   }
 }
 
-export class DeclaracionVariableLocal extends Instruccion {
-  constructor(string, funcionAMemoria) {
+// Base para todas las operaciones binarias (aritméticas y lógicas)
+class OperacionBinaria extends Instruccion {
+  constructor(izq, der) {
     super();
-    this.escritura = string;
-    this.funcion = funcionAMemoria;
+    this.izq = izq;
+    this.der = der;
   }
 
-  resolver(hilo) {
-    this.resuelto = true;
-    hilo.resolverDeclaracionVariableLocal(this.escritura, this.funcion);
-  }
-
-  toString() {
-    return `local ${this.escritura}`;
-  }
-}
-
-export class Imprimir extends Instruccion {
-  constructor(valor, lugarAEscribir) {
-    super();
-    this.valor = valor;
-    this.escritura = lugarAEscribir;
-  }
-
-  resolver(hilo) {
-    if (!this.valor.estaResuelto()) {
-      this.valor.resolver(hilo);
-    } else {
-      this.resuelto = true;
-      const valorAEscribir = this.valor.resolverPuro(hilo);
-      this.escritura.innerHTML += `<p>${valorAEscribir}</p>`;
-      hilo.resolverConImprimir(valorAEscribir);
-    }
-  }
   reiniciar() {
     super.reiniciar();
-    this.valor.reiniciar();
-  }
-
-  resolverPuro(hilo) {}
-
-  toString() {
-    return `imprimir(${this.valor.toString()})`;
-  }
-}
-
-export class Lectura extends Instruccion {
-  constructor(valor) {
-    super();
-    this.valor = valor;
+    this.izq.reiniciar();
+    this.der.reiniciar();
   }
 
   resolver(hilo) {
+    if (!this.izq.estaResuelto()) {
+      this.izq.resolver(hilo);
+    } else if (!this.der.estaResuelto()) {
+      this.der.resolver(hilo);
+    } else {
+      const a = this.izq.resolverPuro();
+      const b = this.der.resolverPuro();
+      this.resultado = this.operar(a, b);
+      hilo.informar(this.tipoOp, `${a} ${this.simbolo} ${b} = ${this.resultado}`);
+      this.resuelto = true;
+    }
+  }
+
+  resolverPuro() { return this.resultado; }
+}
+
+class OperacionAritmetica extends OperacionBinaria {
+  get tipoOp() { return "OP arit"; }
+}
+
+class OperacionLogica extends OperacionBinaria {
+  get tipoOp() { return "OP bool"; }
+}
+
+// --- Aritméticas ---
+
+export class Sumar extends OperacionAritmetica {
+  operar(a, b) { return a + b; }
+  get simbolo() { return "+"; }
+  toString() { return `(${this.izq} + ${this.der})`; }
+}
+
+export class Restar extends OperacionAritmetica {
+  operar(a, b) { return a - b; }
+  get simbolo() { return "-"; }
+  toString() { return `(${this.izq} - ${this.der})`; }
+}
+
+export class Multiplicar extends OperacionAritmetica {
+  operar(a, b) { return a * b; }
+  get simbolo() { return "*"; }
+  toString() { return `(${this.izq} * ${this.der})`; }
+}
+
+export class Dividir extends OperacionAritmetica {
+  operar(a, b) { return a / b; }
+  get simbolo() { return "/"; }
+  toString() { return `(${this.izq} / ${this.der})`; }
+}
+
+// --- Lógicas / comparaciones ---
+
+export class Igualdad extends OperacionLogica {
+  operar(a, b) { return a == b; }
+  get simbolo() { return "=="; }
+  toString() { return `(${this.izq} == ${this.der})`; }
+}
+
+export class Mayor extends OperacionLogica {
+  operar(a, b) { return a > b; }
+  get simbolo() { return ">"; }
+  toString() { return `(${this.izq} > ${this.der})`; }
+}
+
+export class MayorOIgual extends OperacionLogica {
+  operar(a, b) { return a >= b; }
+  get simbolo() { return ">="; }
+  toString() { return `(${this.izq} >= ${this.der})`; }
+}
+
+export class Menor extends OperacionLogica {
+  operar(a, b) { return a < b; }
+  get simbolo() { return "<"; }
+  toString() { return `(${this.izq} < ${this.der})`; }
+}
+
+export class MenorOIgual extends OperacionLogica {
+  operar(a, b) { return a <= b; }
+  get simbolo() { return "<="; }
+  toString() { return `(${this.izq} <= ${this.der})`; }
+}
+
+export class YLogico extends OperacionLogica {
+  operar(a, b) { return a && b; }
+  get simbolo() { return "&&"; }
+  toString() { return `(${this.izq} && ${this.der})`; }
+}
+
+export class OLogico extends OperacionLogica {
+  operar(a, b) { return a || b; }
+  get simbolo() { return "||"; }
+  toString() { return `(${this.izq} || ${this.der})`; }
+}
+
+// --- Instrucciones de memoria ---
+
+export class Lectura extends Instruccion {
+  constructor(variable) {
+    super();
+    this.variable = variable;
+  }
+
+  resolver(hilo) {
+    this.resultado = hilo.leer(this.variable);
     this.resuelto = true;
-    hilo.resolverLectura(this.valor);
   }
 
-  resolverPuro(hilo) {
-    return hilo.valorLocalDe(this.valor);
-  }
-
-  toString() {
-    return `${this.valor}`;
-  }
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.variable}`; }
 }
 
 export class Escritura extends Instruccion {
@@ -114,217 +158,91 @@ export class Escritura extends Instruccion {
     if (!this.valor.estaResuelto()) {
       this.valor.resolver(hilo);
     } else {
+      hilo.escribir(this.nombre, this.valor.resolverPuro());
       this.resuelto = true;
-      hilo.resolverEscritura(this.nombre, this.valor);
     }
   }
 
-  toString() {
-    return `${this.nombre} = ${this.valor.toString()}`;
-  }
+  toString() { return `${this.nombre} = ${this.valor.toString()}`; }
 }
 
-class OperacionBooleana extends Instruccion {
-  constructor(valorIzquierdo, valorDerecho) {
+export class DeclaracionVariableLocal extends Instruccion {
+  constructor(string, funcionAMemoria) {
     super();
-    this.valorIzquierdo = valorIzquierdo;
-    this.valorDerecho = valorDerecho;
+    this.escritura = string;
+    this.funcion = funcionAMemoria;
+  }
+
+  resolver(hilo) {
+    hilo.declararLocal(this.escritura, this.funcion);
+    this.resuelto = true;
+  }
+
+  toString() { return `local ${this.escritura}`; }
+}
+
+export class ValorFijo extends Instruccion {
+  constructor(valor) {
+    super();
+    this.valor = valor;
+  }
+
+  resolver(hilo) {
+    this.resultado = hilo.evaluar(this.valor);
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.valor}`; }
+}
+
+// --- Instrucciones de control ---
+
+export class Imprimir extends Instruccion {
+  constructor(valor, consola) {
+    super();
+    this.valor = valor;
+    this.consola = consola;
   }
 
   reiniciar() {
     super.reiniciar();
-    this.valorIzquierdo.reiniciar();
-    this.valorDerecho.reiniciar();
+    this.valor.reiniciar();
   }
 
   resolver(hilo) {
-    if (!this.valorIzquierdo.estaResuelto()) {
-      this.valorIzquierdo.resolver(hilo);
-    } else if (!this.valorDerecho.estaResuelto()) {
-      this.valorDerecho.resolver(hilo);
+    if (!this.valor.estaResuelto()) {
+      this.valor.resolver(hilo);
     } else {
+      const v = this.valor.resolverPuro();
+      this.consola.innerHTML += `<p>${v}</p>`;
+      hilo.informar("Imprimir", v);
       this.resuelto = true;
-      this.resolverSegunOperacion(hilo);
     }
   }
 
-  resolverPuro(hilo) {
-    return hilo.valorLocalDe("OP");
-  }
-
-  // No implementa toString, las subclases deben hacerlo
-  toString() {
-    throw new Error(
-      "Debes implementar toString() en la subclase de OperacionBooleana"
-    );
-  }
-}
-
-export class YLogico extends OperacionBooleana {
-  constructor(valorIzquierdo, valorDerecho) {
-    super(valorIzquierdo, valorDerecho);
-  }
-
-  resolverSegunOperacion(hilo) {
-    hilo.resolverYLogico(this.valorIzquierdo, this.valorDerecho);
-  }
-
-  toString() {
-    return `(${this.valorIzquierdo.toString()} && ${this.valorDerecho.toString()})`;
-  }
-}
-
-export class OLogico extends OperacionBooleana {
-  constructor(valorIzquierdo, valorDerecho) {
-    super(valorIzquierdo, valorDerecho);
-  }
-
-  resolverSegunOperacion(hilo) {
-    hilo.resolverOLogico(this.valorIzquierdo, this.valorDerecho);
-  }
-
-  toString() {
-    return `(${this.valorIzquierdo.toString()} || ${this.valorDerecho.toString()})`;
-  }
-}
-
-export class Comparacion extends Instruccion {
-  constructor(valorIzquierdo, valorDerecho) {
-    super();
-    this.valorIzquierdo = valorIzquierdo;
-    this.valorDerecho = valorDerecho;
-  }
-
-  reiniciar() {
-    super.reiniciar();
-    this.valorIzquierdo.reiniciar();
-    this.valorDerecho.reiniciar();
-  }
-
-  resolver(hilo) {
-    if (!this.valorIzquierdo.estaResuelto()) {
-      this.valorIzquierdo.resolver(hilo);
-    } else if (!this.valorDerecho.estaResuelto()) {
-      this.valorDerecho.resolver(hilo);
-    } else {
-      this.resuelto = true;
-      this.resolverSegunComparacion(hilo);
-    }
-  }
-
-  resolverPuro(hilo) {
-    return hilo.valorLocalDe("OP");
-  }
-
-  // No implementa toString, las subclases deben hacerlo
-  toString() {
-    throw new Error(
-      "Debes implementar toString() en la subclase de Comparacion"
-    );
-  }
-}
-
-export class MayorOIgual extends Comparacion {
-  constructor(valorIzquierdo, valorDerecho) {
-    super(valorIzquierdo, valorDerecho);
-  }
-
-  resolverSegunComparacion(hilo) {
-    hilo.resolverMayorOIgualdad(this.valorIzquierdo, this.valorDerecho);
-  }
-
-  toString() {
-    return `(${this.valorIzquierdo.toString()} >= ${this.valorDerecho.toString()})`;
-  }
-}
-
-export class Menor extends Comparacion {
-  constructor(valorIzquierdo, valorDerecho) {
-    super(valorIzquierdo, valorDerecho);
-  }
-
-  resolverSegunComparacion(hilo) {
-    hilo.resolverMenor(this.valorIzquierdo, this.valorDerecho);
-  }
-
-  toString() {
-    return `(${this.valorIzquierdo.toString()} < ${this.valorDerecho.toString()})`;
-  }
-}
-
-export class MenorOIgual extends Comparacion {
-  constructor(valorIzquierdo, valorDerecho) {
-    super(valorIzquierdo, valorDerecho);
-  }
-
-  resolverSegunComparacion(hilo) {
-    hilo.resolverMenorOIgual(this.valorIzquierdo, this.valorDerecho);
-  }
-
-  toString() {
-    return `(${this.valorIzquierdo.toString()} <= ${this.valorDerecho.toString()})`;
-  }
-}
-
-export class Mayor extends Comparacion {
-  constructor(valorIzquierdo, valorDerecho) {
-    super();
-    this.valorIzquierdo = valorIzquierdo;
-    this.valorDerecho = valorDerecho;
-  }
-
-  resolverSegunComparacion(hilo) {
-    hilo.resolverConMayor(this.valorIzquierdo, this.valorDerecho);
-  }
-
-  toString() {
-    return `(${this.valorIzquierdo.toString()} > ${this.valorDerecho.toString()})`;
-  }
-}
-
-export class Igualdad extends Comparacion {
-  constructor(valorIzquierdo, valorDerecho) {
-    super();
-    this.valorIzquierdo = valorIzquierdo;
-    this.valorDerecho = valorDerecho;
-  }
-
-  resolverSegunComparacion(hilo) {
-    hilo.resolverConIgualdad(this.valorIzquierdo, this.valorDerecho);
-  }
-
-  toString() {
-    return `(${this.valorIzquierdo.toString()} == ${this.valorDerecho.toString()})`;
-  }
+  toString() { return `imprimir(${this.valor.toString()})`; }
 }
 
 export class Condicional extends Instruccion {
   constructor(condicion) {
     super();
     this.condicion = condicion;
-    this.valorDeVerdad;
   }
 
-  reiniciar() {
-    this.condicion.reiniciar();
-  }
+  reiniciar() { this.condicion.reiniciar(); }
 
   resolver(hilo) {
     if (!this.condicion.estaResuelto()) {
       this.condicion.resolver(hilo);
     } else {
+      hilo.resolverCondicional(this.condicion.resolverPuro());
       this.resuelto = true;
-      hilo.resolverCondicional(this.condicion);
     }
   }
 
-  esInstruccionConBloque() {
-    return true;
-  }
-
-  toString() {
-    return `if (${this.condicion.toString()}) { ... }`;
-  }
+  esInstruccionConBloque() { return true; }
+  toString() { return `if (${this.condicion.toString()}) { ... }`; }
 }
 
 export class Ciclo extends Instruccion {
@@ -333,12 +251,10 @@ export class Ciclo extends Instruccion {
     this.condicion = condicion;
     this.bloque = new ListaCircular(bloque);
     this.maximo = maximo;
-    this.resolviendo = false;
   }
 
-  terminado() {
-    this.resuelto = true;
-  }
+  terminado() { this.resuelto = true; }
+
   reiniciar() {
     super.reiniciar();
     this.maximo--;
@@ -349,31 +265,28 @@ export class Ciclo extends Instruccion {
   resolver(hilo) {
     if (this.maximo === 0) {
       this.resuelto = true;
-      // informar de maximas vueltas se llego
       hilo.resolverMaximoCiclos();
       return;
     }
 
-    const siguienteInstruccion = this.bloque.siguienteElemento();
+    const siguiente = this.bloque.siguienteElemento();
 
-    if (siguienteInstruccion.estaResuelto()) {
+    if (siguiente.estaResuelto()) {
       this.bloque.pasarElemento();
-      const proximaInstruccion = this.bloque.siguienteElemento();
-      if (proximaInstruccion.estaResuelto()) {
+      const proxima = this.bloque.siguienteElemento();
+      if (proxima.estaResuelto()) {
         if (!this.condicion.estaResuelto()) {
           this.condicion.resolver(hilo);
         } else {
-          hilo.resolverSeguirCiclo(this.condicion, this);
+          hilo.resolverSeguirCiclo(this.condicion.resolverPuro(), this);
         }
       }
     } else {
-      siguienteInstruccion.resolver(hilo);
+      siguiente.resolver(hilo);
     }
   }
 
-  toString() {
-    return `while (${this.condicion.toString()}) { ... }`;
-  }
+  toString() { return `while (${this.condicion.toString()}) { ... }`; }
 }
 
 export class While extends Instruccion {
@@ -387,109 +300,25 @@ export class While extends Instruccion {
     if (!this.condicion.estaResuelto()) {
       this.condicion.resolver(hilo);
     } else {
-      this.resuelto = true;
+      const valor = this.condicion.resolverPuro();
       this.condicion.reiniciar();
-      hilo.resolverWhile(this.condicion, this.max);
+      hilo.resolverWhile(this.condicion, valor, this.max);
+      this.resuelto = true;
     }
   }
 
-  toString() {
-    return `while (${this.condicion.toString()}) { ... }`;
-  }
+  toString() { return `while (${this.condicion.toString()}) { ... }`; }
 }
 
 export class Else extends Instruccion {
-  constructor() {
-    super();
-  }
-
-  resolver(hilo) {
-    this.resuelto = true;
-  }
-
-  esElse() {
-    return true;
-  }
-
-  esInstruccionConBloque() {
-    return true;
-  }
-
-  toString() {
-    return `else { ... }`;
-  }
-}
-
-export class Sumar extends Instruccion {
-  constructor(instruccion1, instruccion2) {
-    super();
-    this.instruccion1 = instruccion1;
-    this.instruccion2 = instruccion2;
-  }
-
-  reiniciar() {
-    super.reiniciar();
-    this.instruccion1.reiniciar();
-    this.instruccion2.reiniciar();
-  }
-
-  resolverPuro(hilo) {
-    // Ahora suma recursivamente los operandos
-    return hilo.valorLocalDe("OP");
-  }
-
-  resolver(hilo) {
-    if (!this.instruccion1.estaResuelto()) {
-      this.instruccion1.resolver(hilo);
-    } else if (!this.instruccion2.estaResuelto()) {
-      this.instruccion2.resolver(hilo);
-    } else {
-      this.resuelto = true;
-      hilo.resolverConSuma(this.instruccion1, this.instruccion2);
-    }
-  }
-
-  toString() {
-    return `(${this.instruccion1.toString()} + ${this.instruccion2.toString()})`;
-  }
-}
-
-export class ValorFijo extends Instruccion {
-  constructor(valor) {
-    super();
-
-    this.valor = valor;
-  }
-
-  resolver(hilo) {
-    this.resuelto = true;
-    hilo.resolverSegunValorFijo(this.valor);
-  }
-  resolverPuro(hilo) {
-    return hilo.valorFijoSegun(this.valor);
-  }
-
-  toString() {
-    return `${this.valor}`;
-  }
+  resolver(hilo) { this.resuelto = true; }
+  esElse() { return true; }
+  esInstruccionConBloque() { return true; }
+  toString() { return `else { ... }`; }
 }
 
 export class FinDeBloque extends Instruccion {
-  constructor() {
-    super();
-  }
-  resolver(hilo) {
-    this.resuelto = true;
-    hilo.resolverFinDeBloque();
-  }
-
-  resolverPuro(hilo) {}
-
-  esFinDeBloque() {
-    return true;
-  }
-
-  toString() {
-    return `}`;
-  }
+  resolver(hilo) { this.resuelto = true; }
+  esFinDeBloque() { return true; }
+  toString() { return `}`; }
 }
