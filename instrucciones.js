@@ -181,6 +181,30 @@ export class DeclaracionVariableLocal extends Instruccion {
   toString() { return `local ${this.escritura}`; }
 }
 
+export class InicializarLocal extends Instruccion {
+  constructor(nombre, expresion) {
+    super();
+    this.nombre = nombre;
+    this.expresion = expresion;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.expresion.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.expresion.estaResuelto()) {
+      this.expresion.resolver(hilo);
+    } else {
+      hilo.escribir(this.nombre, this.expresion.resolverPuro());
+      this.resuelto = true;
+    }
+  }
+
+  toString() { return `local ${this.nombre} = ${this.expresion}`; }
+}
+
 export class ValorFijo extends Instruccion {
   constructor(valor) {
     super();
@@ -311,6 +335,7 @@ export class While extends Instruccion {
     }
   }
 
+  esInstruccionConBloque() { return true; }
   toString() { return `while (${this.condicion.toString()}) { ... }`; }
 }
 
@@ -325,6 +350,120 @@ export class FinDeBloque extends Instruccion {
   resolver(hilo) { this.resuelto = true; }
   esFinDeBloque() { return true; }
   toString() { return `}`; }
+}
+
+export class For extends Instruccion {
+  constructor(init, condicion, incremento, max) {
+    super();
+    this.init = init;
+    this.condicion = condicion;
+    this.incremento = incremento;
+    this.max = max;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.init.reiniciar();
+    this.condicion.reiniciar();
+    this.incremento.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.init.estaResuelto()) {
+      this.init.resolver(hilo);
+    } else if (!this.condicion.estaResuelto()) {
+      this.condicion.resolver(hilo);
+    } else {
+      const valor = this.condicion.resolverPuro();
+      this.condicion.reiniciar();
+      hilo.resolverFor(this.condicion, this.incremento, valor, this.max);
+      this.resuelto = true;
+    }
+  }
+
+  esInstruccionConBloque() { return true; }
+  toString() { return `for(...) { ... }`; }
+}
+
+export class ForEach extends Instruccion {
+  constructor(nombreVar, listaExpr, max) {
+    super();
+    this.nombreVar = nombreVar;
+    this.listaExpr = listaExpr;
+    this.max = max;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.listaExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.listaExpr.estaResuelto()) {
+      this.listaExpr.resolver(hilo);
+    } else {
+      const lista = this.listaExpr.resolverPuro();
+      hilo.resolverForEach(this.nombreVar, lista, this.max);
+      this.resuelto = true;
+    }
+  }
+
+  esInstruccionConBloque() { return true; }
+  toString() { return `for(${this.nombreVar} : ${this.listaExpr}) { ... }`; }
+}
+
+export class CicloForEach extends Instruccion {
+  constructor(nombreVar, lista, bloque, maximo) {
+    super();
+    this.nombreVar = nombreVar;
+    this.lista = lista;
+    this.bloque = new ListaCircular(bloque);
+    this.indice = 0;
+    this.maximo = maximo;
+    this.varEstablecida = false;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.indice++;
+    this.maximo--;
+    this.bloque.reiniciarTodos();
+    this.varEstablecida = false;
+  }
+
+  resolver(hilo) {
+    if (this.maximo === 0) {
+      this.resuelto = true;
+      hilo.resolverMaximoCiclos();
+      return;
+    }
+    if (this.indice >= this.lista.length) {
+      this.resuelto = true;
+      return;
+    }
+
+    if (!this.varEstablecida) {
+      hilo.escribirLocal(this.nombreVar, this.lista[this.indice]);
+      this.varEstablecida = true;
+      return;
+    }
+
+    const siguiente = this.bloque.siguienteElemento();
+
+    if (siguiente.estaResuelto()) {
+      this.bloque.pasarElemento();
+      const proxima = this.bloque.siguienteElemento();
+      if (proxima.estaResuelto()) {
+        this.reiniciar();
+      }
+    } else {
+      hilo.pushContexto(siguiente);
+      siguiente.resolver(hilo);
+      hilo.popContexto();
+    }
+  }
+
+  toString() { return `for(${this.nombreVar} : [${this.indice}/${this.lista.length}]) { ... }`; }
 }
 
 // Bloque interno del repeat: recibe el conteo ya evaluado y va decrementando
@@ -392,5 +531,133 @@ export class Repeat extends Instruccion {
     }
   }
 
+  esInstruccionConBloque() { return true; }
   toString() { return `repeat(${this.cantidadExpr.toString()}) { ... }`; }
+}
+
+// --- Nuevas instrucciones ---
+
+export class Negacion extends Instruccion {
+  constructor(expr) {
+    super();
+    this.expr = expr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.expr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.expr.estaResuelto()) {
+      this.expr.resolver(hilo);
+    } else {
+      const val = this.expr.resolverPuro();
+      this.resultado = !val;
+      hilo.informar("OP bool", `!${val} = ${this.resultado}`);
+      this.resuelto = true;
+    }
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `(!${this.expr})`; }
+}
+
+export class GetId extends Instruccion {
+  resolver(hilo) {
+    this.resultado = hilo.getId();
+    hilo.informar("GetId", `id = ${this.resultado}`);
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `getId()`; }
+}
+
+export class Desigualdad extends OperacionLogica {
+  operar(a, b) { return a != b; }
+  get simbolo() { return "!="; }
+  toString() { return `(${this.izq} != ${this.der})`; }
+}
+
+export class LecturaIndexada extends Instruccion {
+  constructor(nombre, indiceExpr) {
+    super();
+    this.nombre = nombre;
+    this.indiceExpr = indiceExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.indiceExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.indiceExpr.estaResuelto()) {
+      this.indiceExpr.resolver(hilo);
+    } else {
+      const idx = this.indiceExpr.resolverPuro();
+      this.resultado = hilo.leerIndexado(this.nombre, idx);
+      this.resuelto = true;
+    }
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.nombre}[${this.indiceExpr}]`; }
+}
+
+export class EscrituraIndexada extends Instruccion {
+  constructor(nombre, indiceExpr, valorExpr) {
+    super();
+    this.nombre = nombre;
+    this.indiceExpr = indiceExpr;
+    this.valorExpr = valorExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.indiceExpr.reiniciar();
+    this.valorExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.indiceExpr.estaResuelto()) {
+      this.indiceExpr.resolver(hilo);
+    } else if (!this.valorExpr.estaResuelto()) {
+      this.valorExpr.resolver(hilo);
+    } else {
+      const idx = this.indiceExpr.resolverPuro();
+      const val = this.valorExpr.resolverPuro();
+      hilo.escribirIndexado(this.nombre, idx, val);
+      this.resuelto = true;
+    }
+  }
+
+  toString() { return `${this.nombre}[${this.indiceExpr}] = ${this.valorExpr}`; }
+}
+
+export class Maximo extends Instruccion {
+  constructor(arregloExpr) {
+    super();
+    this.arregloExpr = arregloExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.arregloExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.arregloExpr.estaResuelto()) {
+      this.arregloExpr.resolver(hilo);
+    } else {
+      const arr = this.arregloExpr.resolverPuro();
+      this.resultado = Math.max(...arr);
+      hilo.informar("Maximo", `max([${arr}]) = ${this.resultado}`);
+      this.resuelto = true;
+    }
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `maximum(${this.arregloExpr})`; }
 }

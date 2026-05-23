@@ -41,4 +41,22 @@ export default [
       "global Int n = 0\n\nThread(2){\n\trepeat(3){\n\t\tn = n + 1\n\t}\n}",
     razon: "Ejemplo de repeat: 2 threads incrementan n 3 veces cada uno",
   },
+  {
+    id: 7,
+    texto:
+      "global Int n = 0\n\nThread(2){\n\tfor(local Int i = 0; i < 3; i = i + 1){\n\t\tn = n + 1\n\t}\n}",
+    razon: "Ejemplo de for incremental: 2 threads suman n 3 veces cada uno",
+  },
+  {
+    id: 8,
+    texto:
+      "global Int n = 0\n\nThread(1){\n\tfor(x : [1,2,3]){\n\t\tn = n + x\n\t}\n}",
+    razon: "Ejemplo de for-each: suma los elementos de una lista",
+  },
+  {
+    id: 9,
+    texto:
+      "global List ticket = [0,0]\nglobal List pidiendoTicket = [false,false]\nglobal Int n = 2\nglobal Int seccionCritica = 0\n\nThread(2){\n\tlocal Int id = getId()\n\tpidiendoTicket[id] = true\n\tticket[id] = 1 + maximum(ticket)\n\tpidiendoTicket[id] = false\n\tfor(j=0;j<n;j=j+1){\n\t\twhile(pidiendoTicket[j]){\n\t\t}\n\t\twhile(ticket[j]!=0&&(ticket[j]<ticket[id]||(ticket[j]==ticket[id]&&j<id))){\n\t\t}\n\t}\n\tseccionCritica = seccionCritica + 1\n\tticket[id] = 0\n}",
+    razon: "Algoritmo de Bakery (Lamport): exclusion mutua con 2 threads",
+  },
 ];

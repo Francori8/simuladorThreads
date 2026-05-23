@@ -1,4 +1,4 @@
-import { Ciclo, CicloRepeat } from "./instrucciones.js";
+import { Ciclo, CicloRepeat, CicloForEach, While } from "./instrucciones.js";
 
 export default class Hilo {
   constructor(id, cache, memoriaCompartida, bloque) {
@@ -82,9 +82,8 @@ export default class Hilo {
 
   resolverWhile(condicion, valor, maximo) {
     if (valor) {
-      this.bloque.unshift(
-        new Ciclo(condicion, this.instruccionesHastaElFinalDeBloque(), maximo)
-      );
+      const cuerpo = this.prepararCuerpo(this.instruccionesHastaElFinalDeBloque(), maximo);
+      this.bloque.unshift(new Ciclo(condicion, cuerpo, maximo));
     } else {
       this.borrarHastaFinDeBloqueDesde(0);
     }
@@ -92,12 +91,92 @@ export default class Hilo {
 
   resolverRepeat(n, maximo) {
     if (n > 0) {
-      const ciclo = new CicloRepeat(this.instruccionesHastaElFinalDeBloque(), maximo);
+      const cuerpo = this.prepararCuerpo(this.instruccionesHastaElFinalDeBloque(), maximo);
+      const ciclo = new CicloRepeat(cuerpo, maximo);
       ciclo.iniciar(n);
       this.bloque.unshift(ciclo);
     } else {
       this.borrarHastaFinDeBloqueDesde(0);
     }
+  }
+
+  resolverFor(condicion, incremento, valor, maximo) {
+    if (valor) {
+      const cuerpo = this.instruccionesHastaElFinalDeBloque();
+      cuerpo.splice(cuerpo.length - 1, 0, incremento);
+      const cuerpoPreparado = this.prepararCuerpo(cuerpo, maximo);
+      this.bloque.unshift(new Ciclo(condicion, cuerpoPreparado, maximo));
+    } else {
+      this.borrarHastaFinDeBloqueDesde(0);
+    }
+  }
+
+  resolverForEach(nombreVar, lista, maximo) {
+    if (lista.length > 0) {
+      const cuerpo = this.prepararCuerpo(this.instruccionesHastaElFinalDeBloque(), maximo);
+      const ciclo = new CicloForEach(nombreVar, lista, cuerpo, maximo);
+      this.bloque.unshift(ciclo);
+    } else {
+      this.borrarHastaFinDeBloqueDesde(0);
+    }
+  }
+
+  // Convierte While anidados en Ciclo antes de armar el ListaCircular,
+  // ya que dentro de un Ciclo no se puede usar hilo.bloque para buscar el cuerpo.
+  prepararCuerpo(bloque, maximo) {
+    const resultado = [];
+    let i = 0;
+    while (i < bloque.length) {
+      const instr = bloque[i];
+      if (instr instanceof While) {
+        let depth = 1, j = i + 1;
+        while (depth > 0 && j < bloque.length) {
+          if (bloque[j].esInstruccionConBloque()) depth++;
+          if (bloque[j].esElse() || bloque[j].esFinDeBloque()) depth--;
+          j++;
+        }
+        const cuerpoInterno = this.prepararCuerpo(bloque.slice(i + 1, j), maximo);
+        resultado.push(new Ciclo(instr.condicion, cuerpoInterno, maximo));
+        i = j;
+      } else {
+        resultado.push(instr);
+        i++;
+      }
+    }
+    return resultado;
+  }
+
+  getId() { return this.id; }
+
+  leerIndexado(nombre, indice) {
+    let arr;
+    if (this.memoriaCompartida.hayVariable(nombre)) {
+      arr = this.memoriaCompartida.verValor(nombre);
+      this.memoriaLocal.agregarVariable(nombre, [...arr]);
+    } else {
+      arr = this.memoriaLocal.verValor(nombre);
+    }
+    const valor = arr[indice];
+    this.informar("Lectura[]", `${nombre}[${indice}] : ${valor}`);
+    return valor;
+  }
+
+  escribirIndexado(nombre, indice, valor) {
+    if (this.memoriaCompartida.hayVariable(nombre)) {
+      const arr = [...this.memoriaCompartida.verValor(nombre)];
+      arr[indice] = valor;
+      this.informar("Escritura[]", `global.${nombre}[${indice}] : ${valor}`);
+      this.memoriaCompartida.agregarVariable(nombre, arr);
+    } else {
+      const arr = [...this.memoriaLocal.verValor(nombre)];
+      arr[indice] = valor;
+      this.memoriaLocal.agregarVariable(nombre, arr);
+    }
+  }
+
+  escribirLocal(nombre, valor) {
+    this.informar("Iteracion", `local.${nombre} : ${valor}`);
+    this.memoriaLocal.agregarVariable(nombre, valor);
   }
 
   resolverSeguirCiclo(valor, ciclo) {
