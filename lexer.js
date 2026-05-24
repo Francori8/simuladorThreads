@@ -1,6 +1,8 @@
 // ─── Token ───────────────────────────────────────────────────────────────────
 
 export const TK = Object.freeze({
+  // Puntuación extra
+  COLON: "COLON",
   // Literales
   NUMBER: "NUMBER",
   STRING: "STRING",
@@ -157,13 +159,12 @@ export class Lexer {
     this.emit(TK.NUMBER, parseInt(raw, 10));
   }
 
-  readString() {
-    // ya consumimos la comilla de apertura
+  readString(closeChar = '"') {
     let value = "";
-    while (this.peek() !== null && this.peek() !== '"') {
+    while (this.peek() !== null && this.peek() !== closeChar) {
       value += this.advance();
     }
-    if (this.peek() === '"') this.advance();  // consume comilla de cierre
+    if (this.peek() === closeChar) this.advance();
     this.emit(TK.STRING, value);
   }
 
@@ -196,7 +197,8 @@ export class Lexer {
       if (/\d/.test(ch)) { this.readNumber(); continue; }
 
       // Strings
-      if (ch === '"') { this.readString(); continue; }
+      if (ch === '"') { this.readString('"'); continue; }
+      if (ch === "'") { this.readString("'"); continue; }
 
       // Identificadores y keywords
       if (/[a-zA-Z_]/.test(ch)) { this.readIdent(); continue; }
@@ -225,6 +227,7 @@ export class Lexer {
         case ",": this.emit(TK.COMMA,     ch); break;
         case ".": this.emit(TK.DOT,       ch); break;
         case ";": this.emit(TK.SEMICOLON, ch); break;
+        case ":": this.emit(TK.COLON,     ch); break;
 
         default:
           console.warn(`Lexer: carácter desconocido '${ch}' en línea ${this.line}`);

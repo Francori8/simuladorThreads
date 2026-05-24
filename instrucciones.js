@@ -636,6 +636,103 @@ export class EscrituraIndexada extends Instruccion {
   toString() { return `${this.nombre}[${this.indiceExpr}] = ${this.valorExpr}`; }
 }
 
+// Valor literal ya evaluado (sin pasar por eval)
+export class Literal extends Instruccion {
+  constructor(valor) {
+    super();
+    this.valor = valor;
+  }
+
+  resolver(hilo) {
+    this.resultado = this.valor;
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return JSON.stringify(this.valor); }
+}
+
+// Lista de expresiones que se evalúan paso a paso
+export class ListaLiteral extends Instruccion {
+  constructor(elementos) {
+    super();
+    this.elementos = elementos;
+    this.idx = 0;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.idx = 0;
+    this.elementos.forEach(e => e.reiniciar());
+  }
+
+  resolver(hilo) {
+    while (this.idx < this.elementos.length) {
+      const e = this.elementos[this.idx];
+      if (!e.estaResuelto()) {
+        e.resolver(hilo);
+        return;
+      }
+      this.idx++;
+    }
+    this.resultado = this.elementos.map(e => e.resolverPuro());
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `[${this.elementos.join(", ")}]`; }
+}
+
+// Acceso a método/propiedad sobre un objeto: obj.metodo o obj.metodo(args)
+export class AccesoMetodo extends Instruccion {
+  static METODOS = {
+    maximum: (arr) => Math.max(...arr),
+    minimum: (arr) => Math.min(...arr),
+    length:  (arr) => arr.length,
+    sum:     (arr) => arr.reduce((a, b) => a + b, 0),
+  };
+
+  constructor(objetoExpr, metodo, argsExprs = []) {
+    super();
+    this.objetoExpr = objetoExpr;
+    this.metodo = metodo;
+    this.argsExprs = argsExprs;
+    this.argIdx = 0;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.objetoExpr.reiniciar();
+    this.argIdx = 0;
+    this.argsExprs.forEach(a => a.reiniciar());
+  }
+
+  resolver(hilo) {
+    if (!this.objetoExpr.estaResuelto()) {
+      this.objetoExpr.resolver(hilo);
+      return;
+    }
+    while (this.argIdx < this.argsExprs.length) {
+      const arg = this.argsExprs[this.argIdx];
+      if (!arg.estaResuelto()) {
+        arg.resolver(hilo);
+        return;
+      }
+      this.argIdx++;
+    }
+    const obj  = this.objetoExpr.resolverPuro();
+    const args = this.argsExprs.map(a => a.resolverPuro());
+    const fn   = AccesoMetodo.METODOS[this.metodo];
+    if (!fn) throw new Error(`Método desconocido: ${this.metodo}`);
+    this.resultado = fn(obj, ...args);
+    hilo.informar("Método", `${this.metodo}(${obj}) = ${this.resultado}`);
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.objetoExpr}.${this.metodo}`; }
+}
+
 export class Maximo extends Instruccion {
   constructor(arregloExpr) {
     super();

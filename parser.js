@@ -1,53 +1,489 @@
+import { Lexer, TK } from "./lexer.js";
 import Memoria from "./memoria.js";
 import Hilo from "./hilos.js";
 import {
-  Sumar,
-  Restar,
-  Multiplicar,
-  Dividir,
-  Imprimir,
-  ValorFijo,
-  Escritura,
-  Lectura,
-  Igualdad,
-  Desigualdad,
-  FinDeBloque,
-  Condicional,
-  Else,
-  DeclaracionVariableLocal,
-  InicializarLocal,
-  While,
-  Mayor,
-  MayorOIgual,
-  Menor,
-  MenorOIgual,
-  YLogico,
-  OLogico,
-  Repeat,
-  For,
-  ForEach,
-  LecturaIndexada,
-  EscrituraIndexada,
-  Maximo,
-  Negacion,
-  GetId,
+  Sumar, Restar, Multiplicar, Dividir,
+  Imprimir, ValorFijo, Literal, ListaLiteral, AccesoMetodo,
+  Escritura, Lectura,
+  Igualdad, Desigualdad, FinDeBloque, Condicional, Else,
+  DeclaracionVariableLocal, InicializarLocal,
+  While, Mayor, MayorOIgual, Menor, MenorOIgual,
+  YLogico, OLogico, Repeat, For, ForEach,
+  LecturaIndexada, EscrituraIndexada, Maximo, Negacion, GetId,
 } from "./instrucciones.js";
 
-export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
-  const lineas = textoRaw
-    .trim()
-    .replaceAll(" ", "")
-    .replaceAll("\t", "")
-    .split("\n")
-    .filter((s) => s !== "");
+// ─── Parser recursivo descendente ────────────────────────────────────────────
 
-  const globales = lineas.filter((s) => s.startsWith("global"));
-  establecerMemoria(globales, mem);
+class Parser {
+  constructor(tokens, mem, consola, limite) {
+    this.tokens  = tokens;
+    this.pos     = 0;
+    this.mem     = mem;
+    this.consola = consola;
+    this.limite  = limite;
+  }
 
-  const bloques = separarCadaThread(lineas);
-  return crearThreads(bloques, mem, consola, limiteRepeticiones);
+  // ── Utilidades de navegación ───────────────────────────────────────────────
+
+  peek()    { return this.tokens[this.pos]; }
+  peekAt(n) { return this.tokens[this.pos + n]; }
+  advance() { return this.tokens[this.pos++]; }
+  check(type) { return this.peek().type === type; }
+
+  match(...types) {
+    if (types.includes(this.peek().type)) return this.advance();
+    return null;
+  }
+
+  expect(type) {
+    const tok = this.peek();
+    if (tok.type !== type)
+      throw new Error(`Parser (línea ${tok.line}): se esperaba '${type}' pero se encontró '${tok.type}' (${JSON.stringify(tok.value)})`);
+    return this.advance();
+  }
+
+  isType(type) {
+    return type === TK.TYPE_INT || type === TK.TYPE_BOOL ||
+           type === TK.TYPE_STRING || type === TK.TYPE_LIST;
+  }
+
+  // ── Top-level ──────────────────────────────────────────────────────────────
+
+  parseProgram() {
+    const globals  = [];
+    const threads  = [];
+
+    while (!this.check(TK.EOF)) {
+      if (this.check(TK.GLOBAL)) {
+        this.advance();
+        globals.push(this.parseGlobalDecl());
+      } else if (this.check(TK.THREAD)) {
+        threads.push(this.parseThread());
+      } else {
+        this.advance();
+      }
+    }
+
+    return { globals, threads };
+  }
+
+  parseGlobalDecl() {
+    this.advance(); // consume type keyword (Int, Bool, String, List)
+    const name = this.expect(TK.IDENT).value;
+    let value;
+    if (this.match(TK.ASSIGN)) value = this.parseLiteralValue();
+    this.match(TK.SEMICOLON);
+    return { name, value };
+  }
+
+  // Evalúa un literal de forma eager (para inicialización de globales)
+  parseLiteralValue() {
+    const tok = this.peek();
+    if (tok.type === TK.NUMBER) { this.advance(); return tok.value; }
+    if (tok.type === TK.STRING) { this.advance(); return tok.value; }
+    if (tok.type === TK.BOOL)   { this.advance(); return tok.value; }
+    if (tok.type === TK.MINUS)  { this.advance(); return -this.parseLiteralValue(); }
+    if (tok.type === TK.LBRACKET) {
+      this.advance();
+      const items = [];
+      while (!this.check(TK.RBRACKET) && !this.check(TK.EOF)) {
+        items.push(this.parseLiteralValue());
+        this.match(TK.COMMA);
+      }
+      this.expect(TK.RBRACKET);
+      return items;
+    }
+    if (tok.type === TK.IDENT) {
+      this.advance();
+      return this.mem.hayVariable(tok.value) ? this.mem.verValor(tok.value) : tok.value;
+    }
+    throw new Error(`Parser (línea ${tok.line}): literal inválido: ${tok.type}`);
+  }
+
+  parseThread() {
+    this.expect(TK.THREAD);
+    this.expect(TK.LPAREN);
+
+    const numTok = this.advance();
+    const rawNum = numTok.value;
+
+    let nombre = null;
+    if (this.match(TK.COMMA)) {
+      nombre = this.advance().value; // STRING o IDENT
+    }
+
+    this.expect(TK.RPAREN);
+    this.expect(TK.LBRACE);
+    const instrucciones = this.parseBlock(); // FinDeBloque sentinel al final
+    return { rawNum, nombre, instrucciones };
+  }
+
+  // Parsea statements hasta RBRACE, consume el RBRACE
+  parseBody() {
+    const result = [];
+    while (!this.check(TK.RBRACE) && !this.check(TK.EOF)) {
+      result.push(...this.parseStatement());
+    }
+    this.match(TK.RBRACE);
+    return result;
+  }
+
+  // Como parseBody pero agrega FinDeBloque al final (para bloques de control)
+  parseBlock() {
+    const result = this.parseBody();
+    result.push(new FinDeBloque());
+    return result;
+  }
+
+  // ── Statements ─────────────────────────────────────────────────────────────
+
+  parseStatement() {
+    const tok = this.peek();
+
+    switch (tok.type) {
+      case TK.LOCAL:   return this.parseLocal();
+      case TK.IF:      return this.parseIf();
+      case TK.ELSE:    return this.parseElse();
+      case TK.WHILE:   return this.parseWhile();
+      case TK.FOR:     return this.parseFor();
+      case TK.FOREACH: return this.parseForeach();
+      case TK.REPEAT:  return this.parseRepeat();
+      default:         return this.parseExprStatement();
+    }
+  }
+
+  parseLocal() {
+    this.expect(TK.LOCAL);
+
+    // Consume tipo opcional
+    if (this.isType(this.peek().type)) this.advance();
+
+    const name = this.expect(TK.IDENT).value;
+
+    if (this.match(TK.ASSIGN)) {
+      const expr = this.parseExpr();
+      this.match(TK.SEMICOLON);
+      return [new InicializarLocal(name, expr)];
+    }
+
+    this.match(TK.SEMICOLON);
+    return [new InicializarLocal(name, new Literal(0))];
+  }
+
+  parseIf() {
+    this.expect(TK.IF);
+    this.expect(TK.LPAREN);
+    const cond = this.parseExpr();
+    this.expect(TK.RPAREN);
+    this.expect(TK.LBRACE);
+    return [new Condicional(cond), ...this.parseBlock()];
+  }
+
+  parseElse() {
+    this.expect(TK.ELSE);
+    this.expect(TK.LBRACE);
+    return [new Else(), ...this.parseBlock()];
+  }
+
+  parseWhile() {
+    this.expect(TK.WHILE);
+    this.expect(TK.LPAREN);
+    const cond = this.parseExpr();
+    this.expect(TK.RPAREN);
+    this.expect(TK.LBRACE);
+    return [new While(cond, this.limite), ...this.parseBlock()];
+  }
+
+  parseFor() {
+    this.expect(TK.FOR);
+    this.expect(TK.LPAREN);
+
+    // Detectar foreach: IDENT ':' expr  (sin tipo declarado)
+    if (this.check(TK.IDENT) && this.peekAt(1)?.type === TK.COLON) {
+      const varName = this.advance().value;
+      this.advance(); // COLON
+      const listaExpr = this.parseExpr();
+      this.expect(TK.RPAREN);
+      this.expect(TK.LBRACE);
+      return [new ForEach(varName, listaExpr, this.limite), ...this.parseBlock()];
+    }
+
+    // for clásico: init ; cond ; incr
+    const init = this.parseForInit();
+    this.expect(TK.SEMICOLON);
+    const cond = this.parseExpr();
+    this.expect(TK.SEMICOLON);
+    const incr = this.parseExpr();
+    this.expect(TK.RPAREN);
+    this.expect(TK.LBRACE);
+    return [new For(init, cond, incr, this.limite), ...this.parseBlock()];
+  }
+
+  parseForeach() {
+    // Si el lexer emite FOREACH como keyword separado
+    this.advance();
+    this.expect(TK.LPAREN);
+    const varName = this.expect(TK.IDENT).value;
+    this.expect(TK.COLON);
+    const listaExpr = this.parseExpr();
+    this.expect(TK.RPAREN);
+    this.expect(TK.LBRACE);
+    return [new ForEach(varName, listaExpr, this.limite), ...this.parseBlock()];
+  }
+
+  parseForInit() {
+    if (this.check(TK.LOCAL)) {
+      this.advance();
+      if (this.isType(this.peek().type)) this.advance();
+      const name = this.expect(TK.IDENT).value;
+      this.expect(TK.ASSIGN);
+      return new InicializarLocal(name, this.parseExpr());
+    }
+    return this.parseExpr();
+  }
+
+  parseRepeat() {
+    this.expect(TK.REPEAT);
+    this.expect(TK.LPAREN);
+    const expr = this.parseExpr();
+    this.expect(TK.RPAREN);
+    this.expect(TK.LBRACE);
+    return [new Repeat(expr, this.limite), ...this.parseBlock()];
+  }
+
+  parseExprStatement() {
+    const expr = this.parseExpr();
+    this.match(TK.SEMICOLON);
+    return [expr];
+  }
+
+  // ── Expresiones (precedencia de baja a alta) ───────────────────────────────
+
+  parseExpr() { return this.parseAssignment(); }
+
+  parseAssignment() {
+    const saved = this.pos;
+
+    if (this.check(TK.IDENT)) {
+      const name = this.advance().value;
+
+      // name[idx] = expr
+      if (this.check(TK.LBRACKET)) {
+        this.advance();
+        const idx = this.parseExpr();
+        this.expect(TK.RBRACKET);
+        if (this.check(TK.ASSIGN)) {
+          this.advance();
+          return new EscrituraIndexada(name, idx, this.parseExpr());
+        }
+        this.pos = saved;
+      // name = expr  (solo = simple, no ==)
+      } else if (this.check(TK.ASSIGN)) {
+        this.advance();
+        return new Escritura(name, this.parseExpr());
+      } else {
+        this.pos = saved;
+      }
+    }
+
+    return this.parseOr();
+  }
+
+  parseOr() {
+    let left = this.parseAnd();
+    while (this.match(TK.OR)) left = new OLogico(left, this.parseAnd());
+    return left;
+  }
+
+  parseAnd() {
+    let left = this.parseEquality();
+    while (this.match(TK.AND)) left = new YLogico(left, this.parseEquality());
+    return left;
+  }
+
+  parseEquality() {
+    let left = this.parseComparison();
+    let tok;
+    while ((tok = this.match(TK.EQ, TK.NEQ))) {
+      const right = this.parseComparison();
+      left = tok.type === TK.EQ ? new Igualdad(left, right) : new Desigualdad(left, right);
+    }
+    return left;
+  }
+
+  parseComparison() {
+    let left = this.parseAdditive();
+    let tok;
+    while ((tok = this.match(TK.LT, TK.GT, TK.LTE, TK.GTE))) {
+      const right = this.parseAdditive();
+      if      (tok.type === TK.LT)  left = new Menor(left, right);
+      else if (tok.type === TK.GT)  left = new Mayor(left, right);
+      else if (tok.type === TK.LTE) left = new MenorOIgual(left, right);
+      else                          left = new MayorOIgual(left, right);
+    }
+    return left;
+  }
+
+  parseAdditive() {
+    let left = this.parseMultiplicative();
+    let tok;
+    while ((tok = this.match(TK.PLUS, TK.MINUS))) {
+      const right = this.parseMultiplicative();
+      left = tok.type === TK.PLUS ? new Sumar(left, right) : new Restar(left, right);
+    }
+    return left;
+  }
+
+  parseMultiplicative() {
+    let left = this.parseUnary();
+    let tok;
+    while ((tok = this.match(TK.STAR, TK.SLASH))) {
+      const right = this.parseUnary();
+      left = tok.type === TK.STAR ? new Multiplicar(left, right) : new Dividir(left, right);
+    }
+    return left;
+  }
+
+  parseUnary() {
+    if (this.match(TK.NOT))   return new Negacion(this.parseUnary());
+    if (this.match(TK.MINUS)) return new Restar(new Literal(0), this.parseUnary());
+    return this.parsePostfix();
+  }
+
+  parsePostfix() {
+    let expr = this.parsePrimary();
+
+    while (true) {
+      if (this.check(TK.DOT)) {
+        this.advance();
+        const method = this.expect(TK.IDENT).value;
+        let args = [];
+        if (this.match(TK.LPAREN)) {
+          while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+            args.push(this.parseExpr());
+            this.match(TK.COMMA);
+          }
+          this.expect(TK.RPAREN);
+        }
+        expr = new AccesoMetodo(expr, method, args);
+
+      } else if (this.check(TK.LBRACKET)) {
+        // Lectura indexada: solo llega acá si parseAssignment no tomó el control
+        this.advance();
+        const idx = this.parseExpr();
+        this.expect(TK.RBRACKET);
+        const nombre = expr instanceof Lectura ? expr.variable : expr.toString();
+        expr = new LecturaIndexada(nombre, idx);
+
+      } else {
+        break;
+      }
+    }
+
+    return expr;
+  }
+
+  parsePrimary() {
+    const tok = this.peek();
+
+    if (tok.type === TK.NUMBER) { this.advance(); return new Literal(tok.value); }
+    if (tok.type === TK.STRING) { this.advance(); return new Literal(tok.value); }
+    if (tok.type === TK.BOOL)   { this.advance(); return new Literal(tok.value); }
+
+    if (tok.type === TK.LPAREN) {
+      this.advance();
+      const expr = this.parseExpr();
+      this.expect(TK.RPAREN);
+      return expr;
+    }
+
+    if (tok.type === TK.LBRACKET) {
+      this.advance();
+      const items = [];
+      while (!this.check(TK.RBRACKET) && !this.check(TK.EOF)) {
+        items.push(this.parseExpr());
+        this.match(TK.COMMA);
+      }
+      this.expect(TK.RBRACKET);
+      return new ListaLiteral(items);
+    }
+
+    if (tok.type === TK.IDENT) {
+      this.advance();
+      const name = tok.value;
+
+      // Built-ins que se parsean como expresión
+      if (this.check(TK.LPAREN)) {
+        this.advance();
+        if (name === 'print') {
+          const arg = this.parseExpr();
+          this.expect(TK.RPAREN);
+          return new Imprimir(arg, this.consola);
+        }
+        if (name === 'maximum') {
+          const arg = this.parseExpr();
+          this.expect(TK.RPAREN);
+          return new Maximo(arg);
+        }
+        if (name === 'getId') {
+          this.expect(TK.RPAREN);
+          return new GetId();
+        }
+        // Función desconocida: consumir args y devolver null
+        while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+          this.parseExpr();
+          this.match(TK.COMMA);
+        }
+        this.expect(TK.RPAREN);
+        return new Literal(null);
+      }
+
+      return new Lectura(name);
+    }
+
+    // Fallback: consumir y devolver null
+    console.warn(`Parser: token inesperado ${tok.type} ('${tok.value}') en línea ${tok.line}`);
+    this.advance();
+    return new Literal(null);
+  }
 }
 
+// ─── API pública ──────────────────────────────────────────────────────────────
+
+export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
+  const tokens = new Lexer(textoRaw).tokenize();
+  const parser = new Parser(tokens, mem, consola, limiteRepeticiones);
+  const { globals, threads } = parser.parseProgram();
+
+  // Inicializar variables globales
+  for (const { name, value } of globals) {
+    if (value !== undefined) mem.agregarVariable(name, value);
+  }
+
+  // Crear hilos
+  let idThread = 0;
+  const hilos = [];
+
+  for (const { rawNum, nombre, instrucciones } of threads) {
+    const num = (typeof rawNum === 'number' || !isNaN(Number(rawNum)))
+      ? Number(rawNum)
+      : mem.verValor(rawNum);
+
+    for (let i = 0; i < num; i++) {
+      hilos.push(new Hilo(
+        idThread++,
+        new Memoria(),
+        mem,
+        [...instrucciones],
+        nombre
+      ));
+    }
+  }
+
+  return hilos;
+}
+
+// Mantenida para compatibilidad con DeclaracionVariableLocal
 export function manejarMemoria(string, mem) {
   if (string.startsWith("Int")) {
     const vari = string.substring(3).replace(";", "").split("=");
@@ -59,346 +495,10 @@ export function manejarMemoria(string, mem) {
   }
   if (string.startsWith("Bool")) {
     const vari = string.substring(4).replace(";", "").split("=");
-    mem.agregarVariable(vari[0], true && eval(vari[1]));
+    mem.agregarVariable(vari[0], vari[1] === "true");
   }
   if (string.startsWith("List")) {
     const vari = string.substring(4).replace(";", "").split("=");
     mem.agregarVariable(vari[0], eval(vari[1]));
   }
-}
-
-function establecerMemoria(lineasGlobal, mem) {
-  lineasGlobal.forEach((s) => manejarMemoria(s.substring(6), mem));
-}
-
-function separarCadaThread(lineas) {
-  const sinGlobales = lineas.filter((s) => !s.startsWith("global"));
-  const bloques = [];
-  sinGlobales.forEach((s) => {
-    if (s.startsWith("Thread")) {
-      bloques.push([s]);
-    } else {
-      bloques[bloques.length - 1].push(s);
-    }
-  });
-  return bloques;
-}
-
-function parsearEncabezadoThread(encabezado) {
-  // encabezado: Thread(n) o Thread(n,"nombre") o Thread(n,nombre)
-  const inner = encabezado.substring(6).replace(/^\(/, "").replace(/\).*$/, "");
-  const commaIdx = inner.search(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
-  let rawNum, nombre;
-  if (commaIdx !== -1) {
-    rawNum = inner.substring(0, commaIdx);
-    nombre = inner.substring(commaIdx + 1).replace(/^"|"$/g, "");
-  } else {
-    rawNum = inner;
-    nombre = null;
-  }
-  return { rawNum: rawNum.trim(), nombre: nombre ? nombre.trim() : null };
-}
-
-function crearThreads(bloques, mem, consola, limiteRepeticiones) {
-  let idThread = 0;
-  const bloquesExpandidos = [];
-  bloques.forEach((bloque) => {
-    const { rawNum, nombre } = parsearEncabezadoThread(bloque[0]);
-    const num = isNaN(Number(rawNum))
-      ? mem.verValor(rawNum)
-      : parseInt(rawNum);
-    for (let i = 0; i < num; i++) bloquesExpandidos.push({ bloque, nombre });
-  });
-  return bloquesExpandidos.map(
-    ({ bloque, nombre }) =>
-      new Hilo(
-        idThread++,
-        new Memoria(),
-        mem,
-        crearInstrucciones(bloque.toSpliced(0, 1), mem, consola, limiteRepeticiones),
-        nombre
-      )
-  );
-}
-
-function crearInstrucciones(lineas, mem, consola, limiteRepeticiones) {
-  return lineas.map((s) => instruccionSegunString(s, mem, consola, limiteRepeticiones));
-}
-
-function instruccionSegunString(string, mem, consola, limiteRepeticiones) {
-  if (string.startsWith("local")) {
-    const rest = string.substring(5);
-    const eqIdx = rest.indexOf("=");
-    if (eqIdx !== -1) {
-      let typeAndName = rest.substring(0, eqIdx);
-      let varName;
-      if (typeAndName.startsWith("Int")) varName = typeAndName.substring(3);
-      else if (typeAndName.startsWith("Bool")) varName = typeAndName.substring(4);
-      else if (typeAndName.startsWith("String")) varName = typeAndName.substring(6);
-      else if (typeAndName.startsWith("List")) varName = typeAndName.substring(4);
-      else varName = typeAndName;
-      varName = varName.replace(";", "");
-      const valueStr = rest.substring(eqIdx + 1);
-      return new InicializarLocal(varName, instruccionSegunString(valueStr, mem, consola, limiteRepeticiones));
-    }
-    return new DeclaracionVariableLocal(rest, manejarMemoria);
-  }
-  if (string.startsWith("print")) {
-    const argumento = extraerContenidoParentesis(string.substring(5));
-    return new Imprimir(instruccionSegunString(argumento, mem, consola, limiteRepeticiones), consola);
-  }
-  if (string.startsWith("while")) {
-    const condicion = extraerContenidoParentesis(string.substring(5));
-    return new While(
-      instruccionSegunString(condicion, mem, consola, limiteRepeticiones),
-      limiteRepeticiones
-    );
-  }
-  if (string.startsWith("repeat")) {
-    const argumento = extraerContenidoParentesis(string.substring(6));
-    return new Repeat(instruccionSegunString(argumento, mem, consola, limiteRepeticiones), limiteRepeticiones);
-  }
-  if (string.startsWith("for")) {
-    const inner = string.substring(3);
-    let depth = 0, closeIdx = -1;
-    for (let i = 0; i < inner.length; i++) {
-      if (inner[i] === "(") depth++;
-      else if (inner[i] === ")") { depth--; if (depth === 0) { closeIdx = i; break; } }
-    }
-    const args = inner.substring(1, closeIdx);
-    if (args.includes(";")) {
-      const idx1 = args.indexOf(";");
-      const idx2 = args.indexOf(";", idx1 + 1);
-      const initStr = args.substring(0, idx1);
-      const condStr = args.substring(idx1 + 1, idx2);
-      const incrStr = args.substring(idx2 + 1);
-      return new For(
-        instruccionSegunString(initStr, mem, consola, limiteRepeticiones),
-        instruccionSegunString(condStr, mem, consola, limiteRepeticiones),
-        instruccionSegunString(incrStr, mem, consola, limiteRepeticiones),
-        limiteRepeticiones
-      );
-    } else {
-      const colonIdx = args.indexOf(":");
-      const nombreVar = args.substring(0, colonIdx);
-      const listaStr = args.substring(colonIdx + 1);
-      return new ForEach(
-        nombreVar,
-        instruccionSegunString(listaStr, mem, consola, limiteRepeticiones),
-        limiteRepeticiones
-      );
-    }
-  }
-  if (string.startsWith("if")) {
-    const condicion = extraerContenidoParentesis(string.substring(2));
-    return new Condicional(instruccionSegunString(condicion, mem, consola, limiteRepeticiones));
-  }
-  if (string.includes("else")) {
-    return new Else();
-  }
-
-  if (string.startsWith("maximum")) {
-    const inner = extraerContenidoParentesis(string.substring(7));
-    return new Maximo(instruccionSegunString(inner, mem, consola, limiteRepeticiones));
-  }
-  if (string.startsWith("getId")) {
-    return new GetId();
-  }
-
-  if (estaEnvueltoEnParentesis(string)) {
-    return instruccionSegunString(string.substring(1, string.length - 1), mem, consola, limiteRepeticiones);
-  }
-
-  if (string.startsWith("!")) {
-    return new Negacion(instruccionSegunString(string.substring(1), mem, consola, limiteRepeticiones));
-  }
-
-  if (esEscrituraIndexada(string)) {
-    const bracketIdx = string.indexOf("[");
-    const nombre = string.substring(0, bracketIdx);
-    let depth = 0, closeIdx = -1;
-    for (let i = bracketIdx; i < string.length; i++) {
-      if (string[i] === "[") depth++;
-      else if (string[i] === "]") { depth--; if (depth === 0) { closeIdx = i; break; } }
-    }
-    const indiceStr = string.substring(bracketIdx + 1, closeIdx);
-    const valorStr = string.substring(closeIdx + 2);
-    return new EscrituraIndexada(
-      nombre,
-      instruccionSegunString(indiceStr, mem, consola, limiteRepeticiones),
-      instruccionSegunString(valorStr, mem, consola, limiteRepeticiones)
-    );
-  }
-
-  if (tieneEscritura(string)) {
-    const partes = string.split("=");
-    const nombre = partes.shift();
-    return new Escritura(nombre, instruccionSegunString(partes.join("="), mem, consola, limiteRepeticiones));
-  }
-
-  let idx;
-  idx = encontrarPrimerOperadorFuera(string, "&&");
-  if (idx !== -1) {
-    return new YLogico(
-      instruccionSegunString(string.substring(0, idx), mem, consola, limiteRepeticiones),
-      instruccionSegunString(string.substring(idx + 2), mem, consola, limiteRepeticiones)
-    );
-  }
-  idx = encontrarPrimerOperadorFuera(string, "||");
-  if (idx !== -1) {
-    return new OLogico(
-      instruccionSegunString(string.substring(0, idx), mem, consola, limiteRepeticiones),
-      instruccionSegunString(string.substring(idx + 2), mem, consola, limiteRepeticiones)
-    );
-  }
-  idx = encontrarPrimerOperadorFuera(string, ">=");
-  if (idx !== -1) {
-    return new MayorOIgual(
-      instruccionSegunString(string.substring(0, idx), mem, consola, limiteRepeticiones),
-      instruccionSegunString(string.substring(idx + 2), mem, consola, limiteRepeticiones)
-    );
-  }
-  idx = encontrarPrimerOperadorFuera(string, "<=");
-  if (idx !== -1) {
-    return new MenorOIgual(
-      instruccionSegunString(string.substring(0, idx), mem, consola, limiteRepeticiones),
-      instruccionSegunString(string.substring(idx + 2), mem, consola, limiteRepeticiones)
-    );
-  }
-  idx = encontrarPrimerOperadorFuera(string, "!=");
-  if (idx !== -1) {
-    return new Desigualdad(
-      instruccionSegunString(string.substring(0, idx), mem, consola, limiteRepeticiones),
-      instruccionSegunString(string.substring(idx + 2), mem, consola, limiteRepeticiones)
-    );
-  }
-  idx = encontrarPrimerOperadorFuera(string, "==");
-  if (idx !== -1) {
-    return new Igualdad(
-      instruccionSegunString(string.substring(0, idx), mem, consola, limiteRepeticiones),
-      instruccionSegunString(string.substring(idx + 2), mem, consola, limiteRepeticiones)
-    );
-  }
-  idx = encontrarPrimerOperadorFuera(string, ">");
-  if (idx !== -1) {
-    return new Mayor(
-      instruccionSegunString(string.substring(0, idx), mem, consola, limiteRepeticiones),
-      instruccionSegunString(string.substring(idx + 1), mem, consola, limiteRepeticiones)
-    );
-  }
-  idx = encontrarPrimerOperadorFuera(string, "<");
-  if (idx !== -1) {
-    return new Menor(
-      instruccionSegunString(string.substring(0, idx), mem, consola, limiteRepeticiones),
-      instruccionSegunString(string.substring(idx + 1), mem, consola, limiteRepeticiones)
-    );
-  }
-
-  const opAditiva = encontrarUltimoOperadorFuera(string, ["+", "-"]);
-  if (opAditiva.indice > 0) {
-    const izq = string.substring(0, opAditiva.indice);
-    const der = string.substring(opAditiva.indice + 1);
-    if (opAditiva.op === "+")
-      return new Sumar(instruccionSegunString(izq, mem, consola, limiteRepeticiones), instruccionSegunString(der, mem, consola, limiteRepeticiones));
-    if (opAditiva.op === "-")
-      return new Restar(instruccionSegunString(izq, mem, consola, limiteRepeticiones), instruccionSegunString(der, mem, consola, limiteRepeticiones));
-  }
-
-  const opMultiplicativa = encontrarUltimoOperadorFuera(string, ["*", "/"]);
-  if (opMultiplicativa.indice !== -1) {
-    const izq = string.substring(0, opMultiplicativa.indice);
-    const der = string.substring(opMultiplicativa.indice + 1);
-    if (opMultiplicativa.op === "*")
-      return new Multiplicar(instruccionSegunString(izq, mem, consola, limiteRepeticiones), instruccionSegunString(der, mem, consola, limiteRepeticiones));
-    if (opMultiplicativa.op === "/")
-      return new Dividir(instruccionSegunString(izq, mem, consola, limiteRepeticiones), instruccionSegunString(der, mem, consola, limiteRepeticiones));
-  }
-
-  if (string.includes("[") && string.endsWith("]") && string.indexOf("[") > 0) {
-    const bracketIdx = string.indexOf("[");
-    const nombre = string.substring(0, bracketIdx);
-    const indiceStr = string.substring(bracketIdx + 1, string.length - 1);
-    return new LecturaIndexada(
-      nombre,
-      instruccionSegunString(indiceStr, mem, consola, limiteRepeticiones)
-    );
-  }
-  if (mem.hayVariable(string)) return new Lectura(string);
-  if (string === "}") return new FinDeBloque();
-
-  return new ValorFijo(string);
-}
-
-// Encuentra la primera ocurrencia de `operador` que no esté dentro de () ni []
-function encontrarPrimerOperadorFuera(string, operador) {
-  let depth = 0;
-  for (let i = 0; i <= string.length - operador.length; i++) {
-    const c = string[i];
-    if (c === "(" || c === "[") depth++;
-    else if (c === ")" || c === "]") depth--;
-    else if (depth === 0 && string.startsWith(operador, i)) return i;
-  }
-  return -1;
-}
-
-function extraerContenidoParentesis(string) {
-  const start = string.indexOf("(");
-  if (start === -1) return string.replace("{", "").trim();
-  let depth = 0, end = -1;
-  for (let i = start; i < string.length; i++) {
-    if (string[i] === "(") depth++;
-    else if (string[i] === ")") { depth--; if (depth === 0) { end = i; break; } }
-  }
-  return string.substring(start + 1, end);
-}
-
-function estaEnvueltoEnParentesis(string) {
-  if (!string.startsWith("(")) return false;
-  let profundidad = 0;
-  for (let i = 0; i < string.length; i++) {
-    if (string[i] === "(") profundidad++;
-    else if (string[i] === ")") profundidad--;
-    if (profundidad === 0) return i === string.length - 1;
-  }
-  return false;
-}
-
-function encontrarUltimoOperadorFuera(string, operadores) {
-  let profundidad = 0;
-  let ultimoIndice = -1;
-  let ultimoOp = null;
-  for (let i = 0; i < string.length; i++) {
-    if (string[i] === "(") profundidad++;
-    else if (string[i] === ")") profundidad--;
-    else if (profundidad === 0 && operadores.includes(string[i])) {
-      ultimoIndice = i;
-      ultimoOp = string[i];
-    }
-  }
-  return { indice: ultimoIndice, op: ultimoOp };
-}
-
-function tieneEscritura(string) {
-  let i = 0;
-  let b = false;
-  while (!b && string.length > i) {
-    if (string[i] === ">" || string[i] === "<") break;
-    if (string[i] === "=" && (i === 0 || string[i - 1] !== "!")) b = true;
-    i++;
-  }
-  return b && string[i] !== "=";
-}
-
-function esEscrituraIndexada(string) {
-  const bracketIdx = string.indexOf("[");
-  if (bracketIdx === -1) return false;
-  let depth = 0;
-  for (let i = bracketIdx; i < string.length; i++) {
-    if (string[i] === "[") depth++;
-    else if (string[i] === "]") {
-      depth--;
-      if (depth === 0) return string[i + 1] === "=" && string[i + 2] !== "=";
-    }
-  }
-  return false;
 }
