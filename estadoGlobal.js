@@ -57,7 +57,9 @@ export default class EstadoGlobal {
     this.sortearSuerte();
     this.threads.forEach((thread) => thread.setEstadoGlobal(this));
 
-    this.threadPreparados()[0].ejecutarSiguienteInstruccion(this);
+    const preparados = this.threadPreparados();
+    if (preparados.length === 0) return;
+    preparados[0].ejecutarSiguienteInstruccion(this);
   }
 
   threadPreparados() {

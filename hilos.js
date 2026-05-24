@@ -1,8 +1,9 @@
 import { Ciclo, CicloRepeat, CicloForEach, While } from "./instrucciones.js";
 
 export default class Hilo {
-  constructor(id, cache, memoriaCompartida, bloque) {
+  constructor(id, cache, memoriaCompartida, bloque, nombre = null) {
     this.id = id;
+    this.nombre = nombre ?? `Thread-${id}`;
     this.memoriaLocal = cache;
     this.memoriaCompartida = memoriaCompartida;
     this.bloque = bloque;

@@ -84,22 +84,39 @@ function separarCadaThread(lineas) {
   return bloques;
 }
 
+function parsearEncabezadoThread(encabezado) {
+  // encabezado: Thread(n) o Thread(n,"nombre") o Thread(n,nombre)
+  const inner = encabezado.substring(6).replace(/^\(/, "").replace(/\).*$/, "");
+  const commaIdx = inner.search(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+  let rawNum, nombre;
+  if (commaIdx !== -1) {
+    rawNum = inner.substring(0, commaIdx);
+    nombre = inner.substring(commaIdx + 1).replace(/^"|"$/g, "");
+  } else {
+    rawNum = inner;
+    nombre = null;
+  }
+  return { rawNum: rawNum.trim(), nombre: nombre ? nombre.trim() : null };
+}
+
 function crearThreads(bloques, mem, consola, limiteRepeticiones) {
   let idThread = 0;
   const bloquesExpandidos = [];
   bloques.forEach((bloque) => {
-    const num = parseInt(
-      bloque[0].substring(6).replace("(", "").replace(")", "")
-    );
-    for (let i = 0; i < num; i++) bloquesExpandidos.push(bloque);
+    const { rawNum, nombre } = parsearEncabezadoThread(bloque[0]);
+    const num = isNaN(Number(rawNum))
+      ? mem.verValor(rawNum)
+      : parseInt(rawNum);
+    for (let i = 0; i < num; i++) bloquesExpandidos.push({ bloque, nombre });
   });
   return bloquesExpandidos.map(
-    (bloque) =>
+    ({ bloque, nombre }) =>
       new Hilo(
         idThread++,
         new Memoria(),
         mem,
-        crearInstrucciones(bloque.toSpliced(0, 1), mem, consola, limiteRepeticiones)
+        crearInstrucciones(bloque.toSpliced(0, 1), mem, consola, limiteRepeticiones),
+        nombre
       )
   );
 }
