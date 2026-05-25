@@ -56,7 +56,7 @@ export default [
   {
     id: 9,
     texto:
-      "global List ticket = [0,0]\nglobal List pidiendoTicket = [false,false]\nglobal Int n = 2\nglobal Int seccionCritica = 0\n\nThread(2){\n\tlocal Int id = getId()\n\tpidiendoTicket[id] = true\n\tticket[id] = 1 + maximum(ticket)\n\tpidiendoTicket[id] = false\n\tfor(j=0;j<n;j=j+1){\n\t\twhile(pidiendoTicket[j]){\n\t\t}\n\t\twhile(ticket[j]!=0&&(ticket[j]<ticket[id]||(ticket[j]==ticket[id]&&j<id))){\n\t\t}\n\t}\n\tseccionCritica = seccionCritica + 1\n\tticket[id] = 0\n}",
+      "global List ticket = [0,0]\nglobal List pidiendoTicket = [false,false]\nglobal Int n = 2\nglobal Int seccionCritica = 0\n\nThread(2){\n\tlocal Int id = getId()\n\tpidiendoTicket[id] = true\n\tticket[id] = 1 + ticket.maximum()\n\tpidiendoTicket[id] = false\n\tfor(local Int j=0;j<n;j=j+1){\n\t\twhile(pidiendoTicket[j]){\n\t\t}\n\t\twhile(ticket[j]!=0&&(ticket[j]<ticket[id]||(ticket[j]==ticket[id]&&j<id))){\n\t\t}\n\t}\n\tseccionCritica = seccionCritica + 1\n\tticket[id] = 0\n}",
     razon: "Algoritmo de Bakery (Lamport): exclusion mutua con 2 threads",
   },
 ];

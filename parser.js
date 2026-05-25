@@ -464,17 +464,23 @@ export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
   let idThread = 0;
   const hilos = [];
 
-  for (const { rawNum, nombre, instrucciones } of threads) {
+  for (let ti = 0; ti < threads.length; ti++) {
+    const { rawNum, nombre } = threads[ti];
     const num = (typeof rawNum === 'number' || !isNaN(Number(rawNum)))
       ? Number(rawNum)
       : mem.verValor(rawNum);
 
     for (let i = 0; i < num; i++) {
+      // Re-parsear por cada hilo para que cada uno tenga sus propias
+      // instancias de instrucción y no compartan estado (resuelto, resultado, etc.)
+      const tokensCopia = new Lexer(textoRaw).tokenize();
+      const parserCopia = new Parser(tokensCopia, mem, consola, limiteRepeticiones);
+      const { threads: threadsCopia } = parserCopia.parseProgram();
       hilos.push(new Hilo(
         idThread++,
         new Memoria(),
         mem,
-        [...instrucciones],
+        threadsCopia[ti].instrucciones,
         nombre
       ));
     }
