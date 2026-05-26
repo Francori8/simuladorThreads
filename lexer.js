@@ -32,8 +32,9 @@ export const TK = Object.freeze({
   NEW:   "NEW",
   THIS:  "THIS",
 
-  // Keywords Thread
-  THREAD: "THREAD",
+  // Keywords Thread / Function
+  THREAD:   "THREAD",
+  FUNCTION: "FUNCTION",
 
   // Identificador genérico
   IDENT: "IDENT",
@@ -93,7 +94,8 @@ const KEYWORDS = {
   "class":   TK.CLASS,
   "new":     TK.NEW,
   "this":    TK.THIS,
-  "Thread":  TK.THREAD,
+  "Thread":   TK.THREAD,
+  "function": TK.FUNCTION,
   "true":    TK.BOOL,
   "false":   TK.BOOL,
 };

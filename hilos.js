@@ -1,7 +1,8 @@
 import { Ciclo, CicloRepeat, CicloForEach, While } from "./instrucciones.js";
+import Memoria from "./memoria.js";
 
 export default class Hilo {
-  constructor(id, cache, memoriaCompartida, bloque, nombre = null) {
+  constructor(id, cache, memoriaCompartida, bloque, funciones = {}, nombre = null) {
     this.id = id;
     this.nombre = nombre ?? `Thread-${id}`;
     this.memoriaLocal = cache;
@@ -11,6 +12,8 @@ export default class Hilo {
     this.preparado = true;
     this.estadoGlobal = null;
     this._contexto = [];
+    this._callStack = []; // frames de funciones: { bloque, proximaInstruccion, memoriaLocal, llamada }
+    this.funciones = funciones; // tabla nombre -> { params, instrucciones }
   }
 
   setEstadoGlobal(estadoGlobal) {
@@ -21,10 +24,17 @@ export default class Hilo {
 
   ejecutarSiguienteInstruccion() {
     this.proximaInstruccion.resolver(this);
-    if (this.bloque.length === 0) {
-      this.preparado = false;
-    } else if (this.proximaInstruccion.estaResuelto()) {
-      this.proximaInstruccion = this.bloque.shift();
+    if (this.proximaInstruccion.estaResuelto()) {
+      if (this.bloque.length === 0) {
+        // Bloque vacío: si hay un frame pendiente es una función sin return explícito
+        if (this._callStack.length > 0) {
+          this.retornarFuncion(null);
+        } else {
+          this.preparado = false;
+        }
+      } else {
+        this.proximaInstruccion = this.bloque.shift();
+      }
     }
     this.estadoGlobal.decidirQuienSigue(this);
   }
@@ -190,6 +200,50 @@ export default class Hilo {
 
   resolverMaximoCiclos() {
     this.estadoGlobal.informarEstadoFinalizacionPorMaximoCiclos();
+  }
+
+  // --- Call stack de funciones ---
+
+  llamarFuncion(nombre, params, instruccionesTemplate, valores, instruccionLlamada) {
+    // Guardar frame actual
+    this._callStack.push({
+      bloque:              this.bloque,
+      proximaInstruccion:  this.proximaInstruccion,
+      memoriaLocal:        this.memoriaLocal,
+      llamada:             instruccionLlamada,
+    });
+
+    // Nuevo frame: memoria local propia con los parámetros inicializados
+    const nuevoFrame = new Memoria();
+    params.forEach((p, i) => nuevoFrame.agregarVariable(p, valores[i] ?? null));
+
+    // Copiar instrucciones (ya vienen re-parseadas por hilo, así que son instancias frescas)
+    const cuerpo = [...instruccionesTemplate];
+
+    if (cuerpo.length === 0) {
+      // Función vacía: retornar inmediatamente con null
+      instruccionLlamada.resolve(null);
+      return;
+    }
+
+    this.bloque             = cuerpo;
+    this.proximaInstruccion = this.bloque.shift();
+    this.memoriaLocal       = nuevoFrame;
+  }
+
+  retornarFuncion(valor) {
+    if (this._callStack.length === 0) {
+      // return en top-level — ignorar
+      this.preparado = false;
+      return;
+    }
+    const frame = this._callStack.pop();
+    // Restaurar estado del llamador
+    this.bloque             = frame.bloque;
+    this.proximaInstruccion = frame.proximaInstruccion;
+    this.memoriaLocal       = frame.memoriaLocal;
+    // Notificar a la LlamadaFuncion que ya terminó
+    frame.llamada.resolve(valor);
   }
 
   // --- Manipulación interna de la cola ---

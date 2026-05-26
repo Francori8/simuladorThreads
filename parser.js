@@ -10,17 +10,19 @@ import {
   While, Mayor, MayorOIgual, Menor, MenorOIgual,
   YLogico, OLogico, Repeat, For, ForEach,
   LecturaIndexada, EscrituraIndexada, Maximo, Negacion, GetId,
+  LlamadaFuncion, Return,
 } from "./instrucciones.js";
 
 // ─── Parser recursivo descendente ────────────────────────────────────────────
 
 class Parser {
-  constructor(tokens, mem, consola, limite) {
-    this.tokens  = tokens;
-    this.pos     = 0;
-    this.mem     = mem;
-    this.consola = consola;
-    this.limite  = limite;
+  constructor(tokens, mem, consola, limite, funciones = {}) {
+    this.tokens    = tokens;
+    this.pos       = 0;
+    this.mem       = mem;
+    this.consola   = consola;
+    this.limite    = limite;
+    this.funciones = funciones; // tabla compartida: nombre -> { params, instrucciones }
   }
 
   // ── Utilidades de navegación ───────────────────────────────────────────────
@@ -59,6 +61,8 @@ class Parser {
         globals.push(this.parseGlobalDecl());
       } else if (this.check(TK.THREAD)) {
         threads.push(this.parseThread());
+      } else if (this.check(TK.FUNCTION)) {
+        this.parseFunction();
       } else {
         this.advance();
       }
@@ -98,6 +102,30 @@ class Parser {
       return this.mem.hayVariable(tok.value) ? this.mem.verValor(tok.value) : tok.value;
     }
     throw new Error(`Parser (línea ${tok.line}): literal inválido: ${tok.type}`);
+  }
+
+  parseFunction() {
+    this.expect(TK.FUNCTION);
+
+    // Tipo de retorno opcional: function Int foo(...) o function foo(...)
+    if (this.isType(this.peek().type)) this.advance();
+
+    const nombre = this.expect(TK.IDENT).value;
+    this.expect(TK.LPAREN);
+
+    // Parámetros: tipo? nombre, tipo? nombre, ...
+    const params = [];
+    while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+      if (this.isType(this.peek().type)) this.advance(); // consume tipo opcional
+      params.push(this.expect(TK.IDENT).value);
+      this.match(TK.COMMA);
+    }
+    this.expect(TK.RPAREN);
+    this.expect(TK.LBRACE);
+
+    const instrucciones = this.parseBody(); // sin FinDeBloque — el Return lo termina
+
+    this.funciones[nombre] = { params, instrucciones };
   }
 
   parseThread() {
@@ -148,6 +176,7 @@ class Parser {
       case TK.FOR:     return this.parseFor();
       case TK.FOREACH: return this.parseForeach();
       case TK.REPEAT:  return this.parseRepeat();
+      case TK.RETURN:  return this.parseReturn();
       default:         return this.parseExprStatement();
     }
   }
@@ -240,6 +269,18 @@ class Parser {
       return new InicializarLocal(name, this.parseExpr());
     }
     return this.parseExpr();
+  }
+
+  parseReturn() {
+    this.expect(TK.RETURN);
+    // return sin expresión es válido (retorna null)
+    if (this.check(TK.SEMICOLON) || this.check(TK.RBRACE) || this.check(TK.EOF)) {
+      this.match(TK.SEMICOLON);
+      return [new Return(new Literal(null))];
+    }
+    const expr = this.parseExpr();
+    this.match(TK.SEMICOLON);
+    return [new Return(expr)];
   }
 
   parseRepeat() {
@@ -429,6 +470,16 @@ class Parser {
           this.expect(TK.RPAREN);
           return new GetId();
         }
+        // Función definida por el usuario
+        if (this.funciones[name]) {
+          const args = [];
+          while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+            args.push(this.parseExpr());
+            this.match(TK.COMMA);
+          }
+          this.expect(TK.RPAREN);
+          return new LlamadaFuncion(name, args, this.funciones);
+        }
         // Función desconocida: consumir args y devolver null
         while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
           this.parseExpr();
@@ -451,8 +502,10 @@ class Parser {
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
+  // Primera pasada: obtener globals, threads y construir la tabla de funciones
   const tokens = new Lexer(textoRaw).tokenize();
-  const parser = new Parser(tokens, mem, consola, limiteRepeticiones);
+  const funciones = {}; // tabla compartida entre todos los hilos
+  const parser = new Parser(tokens, mem, consola, limiteRepeticiones, funciones);
   const { globals, threads } = parser.parseProgram();
 
   // Inicializar variables globales
@@ -473,15 +526,19 @@ export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
     for (let i = 0; i < num; i++) {
       // Re-parsear por cada hilo para que cada uno tenga sus propias
       // instancias de instrucción y no compartan estado (resuelto, resultado, etc.)
+      // Se pasa la misma tabla de funciones para que las llamadas la encuentren,
+      // pero cada hilo re-parsea las instrucciones de su bloque Thread.
       const tokensCopia = new Lexer(textoRaw).tokenize();
-      const parserCopia = new Parser(tokensCopia, mem, consola, limiteRepeticiones);
+      const funcionesCopia = {}; // las instrucciones de funciones también se re-parsean
+      const parserCopia = new Parser(tokensCopia, mem, consola, limiteRepeticiones, funcionesCopia);
       const { threads: threadsCopia } = parserCopia.parseProgram();
       hilos.push(new Hilo(
         idThread++,
         new Memoria(),
         mem,
         threadsCopia[ti].instrucciones,
-        nombre
+        funcionesCopia,  // cada hilo tiene su propia copia de las instrucciones de funciones
+        nombre ?? null
       ));
     }
   }

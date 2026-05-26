@@ -59,4 +59,16 @@ export default [
       "global List ticket = [0,0]\nglobal List pidiendoTicket = [false,false]\nglobal Int n = 2\nglobal Int seccionCritica = 0\n\nThread(2){\n\tlocal Int id = getId()\n\tpidiendoTicket[id] = true\n\tticket[id] = 1 + ticket.maximum()\n\tpidiendoTicket[id] = false\n\tfor(local Int j=0;j<n;j=j+1){\n\t\twhile(pidiendoTicket[j]){\n\t\t}\n\t\twhile(ticket[j]!=0&&(ticket[j]<ticket[id]||(ticket[j]==ticket[id]&&j<id))){\n\t\t}\n\t}\n\tseccionCritica = seccionCritica + 1\n\tticket[id] = 0\n}",
     razon: "Algoritmo de Bakery (Lamport): exclusion mutua con 2 threads",
   },
+  {
+    id: 10,
+    texto:
+      "global Int contador = 0\n\nfunction incrementar(Int x) {\n\treturn x + 1\n}\n\nThread(2) {\n\tlocal Int leido = contador\n\tlocal Int nuevo = incrementar(leido)\n\tcontador = nuevo\n}",
+    razon: "Ejemplo de función: 2 threads incrementan contador via función (race condition visible)",
+  },
+  {
+    id: 11,
+    texto:
+      "global Int resultado = 0\n\nfunction sumar(Int a, Int b) {\n\treturn a + b\n}\n\nfunction doble(Int x) {\n\treturn sumar(x, x)\n}\n\nThread(2) {\n\tresultado = doble(resultado)\n}",
+    razon: "Ejemplo de funciones compuestas: doble llama a sumar (interleaving entre instrucciones de cada función)",
+  },
 ];

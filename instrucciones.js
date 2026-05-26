@@ -733,6 +733,93 @@ export class AccesoMetodo extends Instruccion {
   toString() { return `${this.objetoExpr}.${this.metodo}`; }
 }
 
+// ─── Funciones ────────────────────────────────────────────────────────────────
+
+// Llamada a función definida por el usuario.
+// Evalúa los argumentos de a uno (con interleaving entre cada uno),
+// luego empuja el frame de la función al call stack del hilo.
+export class LlamadaFuncion extends Instruccion {
+  constructor(nombre, argsExprs, tablaDeFunciones) {
+    super();
+    this.nombre          = nombre;
+    this.argsExprs       = argsExprs;
+    this.tablaDeFunciones = tablaDeFunciones;
+    this.argIdx          = 0;
+    this.enEjecucion     = false; // true mientras el frame de la función está activo
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.argIdx      = 0;
+    this.enEjecucion = false;
+    this.argsExprs.forEach(a => a.reiniciar());
+  }
+
+  resolver(hilo) {
+    // Fase 1: evaluar cada argumento de a uno
+    while (this.argIdx < this.argsExprs.length) {
+      const arg = this.argsExprs[this.argIdx];
+      if (!arg.estaResuelto()) {
+        arg.resolver(hilo);
+        return; // cede el paso al scheduler
+      }
+      this.argIdx++;
+    }
+
+    // Fase 2: primer vez que todos los args están listos — empujar frame
+    if (!this.enEjecucion) {
+      this.enEjecucion = true;
+      const def = this.tablaDeFunciones[this.nombre];
+      if (!def) throw new Error(`Función desconocida: ${this.nombre}`);
+      const valoresArgs = this.argsExprs.map(a => a.resolverPuro());
+      hilo.informar("Llamada", `${this.nombre}(${valoresArgs.join(", ")})`);
+      hilo.llamarFuncion(this.nombre, def.params, def.instrucciones, valoresArgs, this);
+      // El hilo ahora ejecuta instrucciones de la función.
+      // Esta instrucción queda pendiente hasta que Return llame a retornarFuncion().
+      return;
+    }
+
+    // Fase 3: el frame ya terminó (retornarFuncion puso this.resultado y llamó resolve())
+    // No hace nada — resuelto ya fue seteado por retornarFuncion
+  }
+
+  // Llamado por hilos.js cuando la función retorna
+  resolve(valorRetorno) {
+    this.resultado = valorRetorno;
+    this.resuelto  = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.nombre}(...)`; }
+}
+
+// Instrucción return dentro de una función.
+export class Return extends Instruccion {
+  constructor(expr) {
+    super();
+    this.expr    = expr;
+    this.exprIdx = 0;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.expr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.expr.estaResuelto()) {
+      this.expr.resolver(hilo);
+    } else {
+      const valor = this.expr.resolverPuro();
+      hilo.informar("Return", `${this.nombre ?? ""} → ${valor}`);
+      hilo.retornarFuncion(valor);
+      this.resuelto = true;
+    }
+  }
+
+  toString() { return `return ${this.expr}`; }
+}
+
 export class Maximo extends Instruccion {
   constructor(arregloExpr) {
     super();
