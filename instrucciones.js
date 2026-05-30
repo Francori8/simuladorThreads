@@ -1,4 +1,5 @@
 import { ListaCircular } from "./listaCircular.js";
+import { ErrorSimulador } from "./errores.js";
 
 class Instruccion {
   constructor() {
@@ -275,6 +276,7 @@ export class Ciclo extends Instruccion {
     this.condicion = condicion;
     this.bloque = new ListaCircular(bloque);
     this.maximo = maximo;
+    this._evaluandoCondicion = false;
   }
 
   terminado() { this.resuelto = true; }
@@ -283,7 +285,8 @@ export class Ciclo extends Instruccion {
     super.reiniciar();
     this.maximo--;
     this.condicion.reiniciar();
-    this.bloque.reiniciarTodos();
+    this._evaluandoCondicion = false;
+    // El bloque ya fue reiniciado al detectar el fin de vuelta en resolver()
   }
 
   resolver(hilo) {
@@ -293,19 +296,31 @@ export class Ciclo extends Instruccion {
       return;
     }
 
+    // Mientras evaluamos la condición, no ejecutar el bloque
+    if (this._evaluandoCondicion) {
+      if (!this.condicion.estaResuelto()) {
+        hilo.pushContexto(this.condicion);
+        this.condicion.resolver(hilo);
+        hilo.popContexto();
+      } else {
+        this._evaluandoCondicion = false;
+        hilo.resolverSeguirCiclo(this.condicion.resolverPuro(), this);
+      }
+      return;
+    }
+
     const siguiente = this.bloque.siguienteElemento();
 
     if (siguiente.estaResuelto()) {
       this.bloque.pasarElemento();
       const proxima = this.bloque.siguienteElemento();
       if (proxima.estaResuelto()) {
-        if (!this.condicion.estaResuelto()) {
-          hilo.pushContexto(this.condicion);
-          this.condicion.resolver(hilo);
-          hilo.popContexto();
-        } else {
-          hilo.resolverSeguirCiclo(this.condicion.resolverPuro(), this);
-        }
+        // Fin de vuelta: reiniciar bloque y pasar a evaluar condición
+        this.bloque.reiniciarTodos();
+        this._evaluandoCondicion = true;
+        hilo.pushContexto(this.condicion);
+        this.condicion.resolver(hilo);
+        hilo.popContexto();
       }
     } else {
       hilo.pushContexto(siguiente);
@@ -634,6 +649,250 @@ export class EscrituraIndexada extends Instruccion {
   }
 
   toString() { return `${this.nombre}[${this.indiceExpr}] = ${this.valorExpr}`; }
+}
+
+// Valor literal ya evaluado (sin pasar por eval)
+export class Literal extends Instruccion {
+  constructor(valor) {
+    super();
+    this.valor = valor;
+  }
+
+  resolver(hilo) {
+    this.resultado = this.valor;
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return JSON.stringify(this.valor); }
+}
+
+// Lista de expresiones que se evalúan paso a paso
+export class ListaLiteral extends Instruccion {
+  constructor(elementos) {
+    super();
+    this.elementos = elementos;
+    this.idx = 0;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.idx = 0;
+    this.elementos.forEach(e => e.reiniciar());
+  }
+
+  resolver(hilo) {
+    while (this.idx < this.elementos.length) {
+      const e = this.elementos[this.idx];
+      if (!e.estaResuelto()) {
+        e.resolver(hilo);
+        return;
+      }
+      this.idx++;
+    }
+    this.resultado = this.elementos.map(e => e.resolverPuro());
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `[${this.elementos.join(", ")}]`; }
+}
+
+// Acceso a método/propiedad sobre un objeto: obj.metodo o obj.metodo(args)
+export class AccesoMetodo extends Instruccion {
+  static METODOS = {
+    maximum: (arr) => Math.max(...arr),
+    minimum: (arr) => Math.min(...arr),
+    length:  (arr) => arr.length,
+    sum:     (arr) => arr.reduce((a, b) => a + b, 0),
+  };
+
+  constructor(objetoExpr, metodo, argsExprs = []) {
+    super();
+    this.objetoExpr = objetoExpr;
+    this.metodo = metodo;
+    this.argsExprs = argsExprs;
+    this.argIdx = 0;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.objetoExpr.reiniciar();
+    this.argIdx = 0;
+    this.argsExprs.forEach(a => a.reiniciar());
+  }
+
+  resolver(hilo) {
+    if (!this.objetoExpr.estaResuelto()) {
+      this.objetoExpr.resolver(hilo);
+      return;
+    }
+    while (this.argIdx < this.argsExprs.length) {
+      const arg = this.argsExprs[this.argIdx];
+      if (!arg.estaResuelto()) {
+        arg.resolver(hilo);
+        return;
+      }
+      this.argIdx++;
+    }
+    const obj  = this.objetoExpr.resolverPuro();
+    const args = this.argsExprs.map(a => a.resolverPuro());
+    const fn   = AccesoMetodo.METODOS[this.metodo];
+    if (!fn) throw ErrorSimulador.runtime(`Método desconocido: "${this.metodo}"`);
+    this.resultado = fn(obj, ...args);
+    hilo.informar("Método", `${this.metodo}(${obj}) = ${this.resultado}`);
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.objetoExpr}.${this.metodo}`; }
+}
+
+// ─── Funciones ────────────────────────────────────────────────────────────────
+
+// Llamada a función definida por el usuario.
+// Evalúa los argumentos de a uno (con interleaving entre cada uno),
+// luego empuja el frame de la función al call stack del hilo.
+export class LlamadaFuncion extends Instruccion {
+  constructor(nombre, argsExprs, tablaDeFunciones) {
+    super();
+    this.nombre          = nombre;
+    this.argsExprs       = argsExprs;
+    this.tablaDeFunciones = tablaDeFunciones;
+    this.argIdx          = 0;
+    this.enEjecucion     = false; // true mientras el frame de la función está activo
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.argIdx      = 0;
+    this.enEjecucion = false;
+    this.argsExprs.forEach(a => a.reiniciar());
+  }
+
+  resolver(hilo) {
+    // Fase 1: evaluar cada argumento de a uno
+    while (this.argIdx < this.argsExprs.length) {
+      const arg = this.argsExprs[this.argIdx];
+      if (!arg.estaResuelto()) {
+        arg.resolver(hilo);
+        return; // cede el paso al scheduler
+      }
+      this.argIdx++;
+    }
+
+    // Fase 2: primer vez que todos los args están listos — empujar frame
+    if (!this.enEjecucion) {
+      this.enEjecucion = true;
+      const def = this.tablaDeFunciones[this.nombre];
+      if (!def) throw new Error(`Función desconocida: ${this.nombre}`);
+      const valoresArgs = this.argsExprs.map(a => a.resolverPuro());
+      hilo.informar("Llamada", `${this.nombre}(${valoresArgs.join(", ")})`);
+      hilo.llamarFuncion(this.nombre, def.params, def.instrucciones, valoresArgs, this);
+      // El hilo ahora ejecuta instrucciones de la función.
+      // Esta instrucción queda pendiente hasta que Return llame a retornarFuncion().
+      return;
+    }
+
+    // Fase 3: el frame ya terminó (retornarFuncion puso this.resultado y llamó resolve())
+    // No hace nada — resuelto ya fue seteado por retornarFuncion
+  }
+
+  // Llamado por hilos.js cuando la función retorna
+  resolve(valorRetorno) {
+    this.resultado = valorRetorno;
+    this.resuelto  = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.nombre}(...)`; }
+}
+
+// Instrucción return dentro de una función.
+export class Return extends Instruccion {
+  constructor(expr) {
+    super();
+    this.expr    = expr;
+    this.exprIdx = 0;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.expr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.expr.estaResuelto()) {
+      this.expr.resolver(hilo);
+    } else {
+      const valor = this.expr.resolverPuro();
+      hilo.informar("Return", `${this.nombre ?? ""} → ${valor}`);
+      hilo.retornarFuncion(valor);
+      this.resuelto = true;
+    }
+  }
+
+  toString() { return `return ${this.expr}`; }
+}
+
+// --- Semáforos ---
+
+// Instrucción s.acquire(): bloquea el hilo si no hay permisos disponibles.
+// Si el hilo queda bloqueado, esta instrucción NO se marca resuelta.
+// Cuando el hilo sea despertado, despertar() llama resolverComoDesbloqueado()
+// para marcarla resuelta y el hilo avanza normalmente.
+export class Acquire extends Instruccion {
+  constructor(semExpr) {
+    super();
+    this.semExpr = semExpr; // expresión que resuelve al objeto Semaphore
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.semExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.semExpr.estaResuelto()) {
+      this.semExpr.resolver(hilo);
+      return;
+    }
+    const sem = this.semExpr.resolverPuro();
+    const ok = sem.acquire(hilo, this);
+    if (ok) this.resuelto = true;
+  }
+
+  // Llamado por Hilo.despertar() cuando el semáforo hace hand-off
+  resolverComoDesbloqueado() {
+    this.resuelto = true;
+  }
+
+  toString() { return `${this.semExpr}.acquire()`; }
+}
+
+// Instrucción s.release(): libera un permiso o hace hand-off a un thread bloqueado.
+export class Release extends Instruccion {
+  constructor(semExpr) {
+    super();
+    this.semExpr = semExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.semExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.semExpr.estaResuelto()) {
+      this.semExpr.resolver(hilo);
+      return;
+    }
+    const sem = this.semExpr.resolverPuro();
+    sem.release(hilo);
+    this.resuelto = true;
+  }
+
+  toString() { return `${this.semExpr}.release()`; }
 }
 
 export class Maximo extends Instruccion {

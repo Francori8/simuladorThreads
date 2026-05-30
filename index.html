@@ -8,67 +8,55 @@
   </head>
   <body>
     <header>
-      <h1>Simulador de Threads (Experimental)</h1>
-      <!-- NUEVO: Barra de controles en una sola línea -->
-      <div class="barra-controles">
-        <div class="control-columna">
-          <p>Ejemplos</p>
-          <div id="contenedorBotones" class="ejemplo-botones"></div>
+      <div class="header-bar">
+        <h1>Simulador de Threads</h1>
+        <div class="header-probabilidad">
+          <span class="config-label">Probabilidad de cambio</span>
+          <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0" />
         </div>
-        <div class="control-columna">
-          <label for="porcentaje">Probabilidad</label>
-          <input
-            type="range"
-            name="porcentaje"
-            id="porcentaje"
-            min="0"
-            max="6"
-            value="0"
-          />
+        <button id="btn-config" class="btn-config" aria-expanded="false">
+          ⚙ Configuración
+        </button>
+      </div>
+
+      <div id="panel-config" class="panel-config" hidden>
+        <div class="config-seccion">
+          <span class="config-label">Ejemplos</span>
+          <div id="contenedorBotones"></div>
         </div>
-        <div class="control-columna">
-          <label>Límite de Ciclos</label>
+        <div class="config-seccion config-seccion--small">
+          <span class="config-label">Límite de ciclos</span>
           <div class="limite-ciclos-opciones">
             <input type="radio" name="limite" id="limite-5" value="5" />
             <label for="limite-5">5</label>
-            <input
-              type="radio"
-              name="limite"
-              id="limite-10"
-              value="10"
-              checked
-            />
+            <input type="radio" name="limite" id="limite-10" value="10" checked />
             <label for="limite-10">10</label>
             <input type="radio" name="limite" id="limite-20" value="20" />
             <label for="limite-20">20</label>
-            <input
-              type="radio"
-              name="limite"
-              id="limite-SinLimite"
-              value="-1"
-            />
-            <label for="limite-SinLimite">Sin Límite</label>
+            <input type="radio" name="limite" id="limite-SinLimite" value="-1" />
+            <label for="limite-SinLimite">∞</label>
           </div>
         </div>
       </div>
     </header>
+
     <main>
       <section id="contenedorDeTexto">
-        <div class="contenedorCodigo">
-          <textarea name="codigo" id="codigo">
-global Int n = 0
+        <textarea name="codigo" id="codigo">global Int n = 0
 
 Thread(2){
-        
+
        while( n == 1){
          n = n + 1
        }
-    
-}</textarea
-          >
+
+}</textarea>
+        <div class="editor-footer">
+          <div id="panel-error" hidden></div>
           <button id="ejecutar">Ejecutar</button>
         </div>
       </section>
+
       <section id="visual">
         <div id="panel-salida">
           <div class="seccionEscrita">
@@ -88,6 +76,7 @@ Thread(2){
         </div>
       </section>
     </main>
+
     <script type="module" src="./script.js"></script>
   </body>
 </html>

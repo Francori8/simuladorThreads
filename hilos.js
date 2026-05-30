@@ -1,29 +1,67 @@
 import { Ciclo, CicloRepeat, CicloForEach, While } from "./instrucciones.js";
+import Memoria from "./memoria.js";
+import { Semaphore } from "./semaforo.js";
+import { ErrorSimulador } from "./errores.js";
+
+function esSemaforo(valor) {
+  return valor instanceof Semaphore || Array.isArray(valor) && valor[0] instanceof Semaphore;
+}
 
 export default class Hilo {
-  constructor(id, cache, memoriaCompartida, bloque) {
+  constructor(id, cache, memoriaCompartida, bloque, funciones = {}, nombre = null) {
     this.id = id;
+    this.nombre = nombre ?? `Thread-${id}`;
     this.memoriaLocal = cache;
     this.memoriaCompartida = memoriaCompartida;
     this.bloque = bloque;
     this.proximaInstruccion = bloque.shift();
     this.preparado = true;
+    this.bloqueado = false;
     this.estadoGlobal = null;
     this._contexto = [];
+    this._callStack = []; // frames de funciones: { bloque, proximaInstruccion, memoriaLocal, llamada }
+    this.funciones = funciones; // tabla nombre -> { params, instrucciones }
   }
 
   setEstadoGlobal(estadoGlobal) {
     this.estadoGlobal = estadoGlobal;
   }
 
-  estaPreparado() { return this.preparado; }
+  estaPreparado()  { return this.preparado; }
+  estaBloqueado()  { return this.bloqueado; }
+
+  bloquear(instruccionAcquire) {
+    this.preparado = false;
+    this.bloqueado = true;
+    this._acquirePendiente = instruccionAcquire;
+    this.informar("Bloqueado", `esperando semáforo`);
+  }
+
+  despertar() {
+    this.preparado = true;
+    this.bloqueado = false;
+    this.informar("Despertado", `semáforo liberado`);
+    if (this._acquirePendiente) {
+      this._acquirePendiente.resolverComoDesbloqueado();
+      this._acquirePendiente = null;
+    }
+  }
 
   ejecutarSiguienteInstruccion() {
-    this.proximaInstruccion.resolver(this);
-    if (this.bloque.length === 0) {
-      this.preparado = false;
-    } else if (this.proximaInstruccion.estaResuelto()) {
-      this.proximaInstruccion = this.bloque.shift();
+    if (!this.proximaInstruccion.estaResuelto()) {
+      this.proximaInstruccion.resolver(this);
+    }
+    if (this.proximaInstruccion.estaResuelto()) {
+      if (this.bloque.length === 0) {
+        // Bloque vacío: si hay un frame pendiente es una función sin return explícito
+        if (this._callStack.length > 0) {
+          this.retornarFuncion(null);
+        } else {
+          this.preparado = false;
+        }
+      } else {
+        this.proximaInstruccion = this.bloque.shift();
+      }
     }
     this.estadoGlobal.decidirQuienSigue(this);
   }
@@ -34,11 +72,21 @@ export default class Hilo {
     let valor;
     if (this.memoriaCompartida.hayVariable(nombre)) {
       valor = this.memoriaCompartida.verValor(nombre);
-      this.memoriaLocal.agregarVariable(nombre, valor);
-    } else {
+      if (!esSemaforo(valor)) {
+        this.memoriaLocal.agregarVariable(nombre, valor);
+      }
+    } else if (this.memoriaLocal.hayVariable(nombre)) {
       valor = this.memoriaLocal.verValor(nombre);
+    } else {
+      throw ErrorSimulador.runtime(
+        `Variable "${nombre}" no está declarada`,
+        this.id,
+        this.proximaInstruccion?.toString()
+      );
     }
-    this.informar("Lectura", `local.${nombre} : ${valor}`);
+    if (!esSemaforo(valor)) {
+      this.informar("Lectura", `local.${nombre} : ${valor}`);
+    }
     return valor;
   }
 
@@ -152,12 +200,36 @@ export default class Hilo {
     let arr;
     if (this.memoriaCompartida.hayVariable(nombre)) {
       arr = this.memoriaCompartida.verValor(nombre);
-      this.memoriaLocal.agregarVariable(nombre, [...arr]);
-    } else {
+      if (!esSemaforo(arr)) {
+        this.memoriaLocal.agregarVariable(nombre, [...arr]);
+      }
+    } else if (this.memoriaLocal.hayVariable(nombre)) {
       arr = this.memoriaLocal.verValor(nombre);
+    } else {
+      throw ErrorSimulador.runtime(
+        `Variable "${nombre}" no está declarada`,
+        this.id,
+        this.proximaInstruccion?.toString()
+      );
+    }
+    if (!Array.isArray(arr) && !(arr instanceof Semaphore)) {
+      throw ErrorSimulador.runtime(
+        `"${nombre}" no es una lista (es ${typeof arr})`,
+        this.id,
+        this.proximaInstruccion?.toString()
+      );
+    }
+    if (Array.isArray(arr) && (indice < 0 || indice >= arr.length)) {
+      throw ErrorSimulador.runtime(
+        `Índice ${indice} fuera de rango en "${nombre}" (tamaño ${arr.length})`,
+        this.id,
+        this.proximaInstruccion?.toString()
+      );
     }
     const valor = arr[indice];
-    this.informar("Lectura[]", `${nombre}[${indice}] : ${valor}`);
+    if (!esSemaforo(valor)) {
+      this.informar("Lectura[]", `${nombre}[${indice}] : ${valor}`);
+    }
     return valor;
   }
 
@@ -189,6 +261,50 @@ export default class Hilo {
 
   resolverMaximoCiclos() {
     this.estadoGlobal.informarEstadoFinalizacionPorMaximoCiclos();
+  }
+
+  // --- Call stack de funciones ---
+
+  llamarFuncion(nombre, params, instruccionesTemplate, valores, instruccionLlamada) {
+    // Guardar frame actual
+    this._callStack.push({
+      bloque:              this.bloque,
+      proximaInstruccion:  this.proximaInstruccion,
+      memoriaLocal:        this.memoriaLocal,
+      llamada:             instruccionLlamada,
+    });
+
+    // Nuevo frame: memoria local propia con los parámetros inicializados
+    const nuevoFrame = new Memoria();
+    params.forEach((p, i) => nuevoFrame.agregarVariable(p, valores[i] ?? null));
+
+    // Copiar instrucciones (ya vienen re-parseadas por hilo, así que son instancias frescas)
+    const cuerpo = [...instruccionesTemplate];
+
+    if (cuerpo.length === 0) {
+      // Función vacía: retornar inmediatamente con null
+      instruccionLlamada.resolve(null);
+      return;
+    }
+
+    this.bloque             = cuerpo;
+    this.proximaInstruccion = this.bloque.shift();
+    this.memoriaLocal       = nuevoFrame;
+  }
+
+  retornarFuncion(valor) {
+    if (this._callStack.length === 0) {
+      // return en top-level — ignorar
+      this.preparado = false;
+      return;
+    }
+    const frame = this._callStack.pop();
+    // Restaurar estado del llamador
+    this.bloque             = frame.bloque;
+    this.proximaInstruccion = frame.proximaInstruccion;
+    this.memoriaLocal       = frame.memoriaLocal;
+    // Notificar a la LlamadaFuncion que ya terminó
+    frame.llamada.resolve(valor);
   }
 
   // --- Manipulación interna de la cola ---

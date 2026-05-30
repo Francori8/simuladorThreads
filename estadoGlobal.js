@@ -39,14 +39,21 @@ export default class EstadoGlobal {
 
   decidirQuienSigue(thread) {
     this.sortearSuerte();
-    const threadPreaprados = this.threadPreparados();
-    if (threadPreaprados.length == 0) {
-      this.informarEstadoFinalizacionExitosa();
+    const preparados = this.threadPreparados();
+    if (preparados.length === 0) {
+      const bloqueados = this.threads.filter(th => th.estaBloqueado());
+      if (bloqueados.length > 0) {
+        this.informarDeadlock();
+      } else {
+        this.informarEstadoFinalizacionExitosa();
+      }
     } else {
-      // thread bloquear el actual
-
-      threadPreaprados[0].ejecutarSiguienteInstruccion(this);
+      preparados[0].ejecutarSiguienteInstruccion(this);
     }
+  }
+
+  informarDeadlock() {
+    console.warn("DEADLOCK: todos los threads están bloqueados esperando un semáforo.");
   }
 
   sortearSuerte() {
@@ -57,7 +64,9 @@ export default class EstadoGlobal {
     this.sortearSuerte();
     this.threads.forEach((thread) => thread.setEstadoGlobal(this));
 
-    this.threadPreparados()[0].ejecutarSiguienteInstruccion(this);
+    const preparados = this.threadPreparados();
+    if (preparados.length === 0) return;
+    preparados[0].ejecutarSiguienteInstruccion(this);
   }
 
   threadPreparados() {
