@@ -8,6 +8,8 @@ El objetivo es hacer visible lo que normalmente es invisible: el scheduler puede
 
 El slider de **probabilidad** controla el sesgo del scheduler: en 0 tiende a mantener el mismo thread corriendo (más secuencial), en el máximo cambia de thread con más frecuencia (más interleaving).
 
+---
+
 ## Sintaxis del pseudocódigo
 
 ```
@@ -19,62 +21,181 @@ Thread(2){
 ```
 
 - `Thread(N)` crea N instancias del mismo bloque
+- `Thread(N, 'nombre')` crea N instancias con nombre
 - `global Tipo nombre = valor` declara una variable compartida entre todos los threads
 - `local Tipo nombre = valor` declara una variable local al thread
-- Tipos disponibles: `Int`, `String`, `Bool`, `List`
+- Tipos disponibles: `Int`, `String`, `Bool`, `List`, `Semaphore`
 
 ## Operaciones implementadas
 
 | Categoría     | Operadores                  |
 |---------------|-----------------------------|
 | Aritméticas   | `+`  `-`  `*`  `/`          |
-| Comparación   | `==`  `>`  `>=`  `<`  `<=`  |
-| Lógicas       | `&&`  `\|\|`                |
+| Comparación   | `==`  `!=`  `>`  `>=`  `<`  `<=`  |
+| Lógicas       | `&&`  `\|\|`  `!`           |
 | Agrupación    | `( )`                       |
 
 ## Control de flujo implementado
 
 - `if (condicion) { ... } else { ... }`
 - `while (condicion) { ... }` — con límite de ciclos configurable
-- `repeat(n) { ... }` — repite el bloque `n` veces; `n` puede ser una variable. No es atómico: el scheduler puede interrumpir entre iteraciones. Respeta el mismo límite de ciclos que el while.
+- `repeat(n) { ... }` — repite el bloque `n` veces
+- `for(local Int i = 0; i < n; i = i + 1) { ... }`
+- `for(x : lista) { ... }` — for-each
 - `print(expresion)`
 
-## Ejemplos incluidos
+## Funciones
 
-| ID | Descripción |
-|----|-------------|
-| 0  | Dos pares de threads imprimiendo colores distintos — muestra interleaving básico |
-| 1  | Thread suma global e imprime — muestra que la lectura puede ser anterior a la escritura del otro thread |
-| 2  | Dos threads incrementando la misma variable — clásico ejemplo de pérdida de escritura por race condition |
-| 3  | Dos threads con variables distintas que dependen entre sí — pérdida de suma cruzada |
-| 4  | While con condición compartida — dos threads esperando la misma condición |
-| 5  | While con print — muestra cómo un thread puede leer valores viejos mientras el otro actualiza |
-| 6  | Repeat — dos threads repitiendo un bloque 3 veces cada uno, con posible pérdida de incrementos |
+```
+function Int nombreFuncion(Int param1, Int param2) {
+    return param1 + param2
+}
+```
 
----
+- El tipo de retorno es opcional
+- Los parámetros pueden llevar tipo o no
+- El interleaving puede ocurrir entre instrucciones de la función
 
-## Lo que falta antes de agregar semáforos
+## Semáforos
 
-Los semáforos necesitan que un thread pueda **bloquearse** esperando a otro. Para que eso funcione bien y sea útil educativamente, primero conviene tener:
+```
+global Semaphore s = new Semaphore(1)          // débil, 1 permiso
+global Semaphore s = new Semaphore(1, true)    // fuerte (FIFO), 1 permiso
+global Semaphore[] sems = new Semaphore[5](1)  // array de 5 semáforos débiles
+global Semaphore[] sems = new Semaphore[5](1, true)  // array de 5 semáforos fuertes
+```
 
-### 1. Estado "bloqueado" en los threads
-Hoy un thread está o `preparado` o terminado. Para semáforos hace falta un tercer estado: bloqueado. El scheduler tiene que saltear threads bloqueados y despertarlos cuando el semáforo los libere.
-
-### 2. Operador `!=`
-Es la negación de `==` y casi seguro aparece en cualquier ejemplo con semáforos o flags. Hoy no está.
-
-### 3. Negación lógica `!`
-Complementa `!=` y permite escribir condiciones más naturales como `while(!libre)`.
-
-### 4. Ejecución paso a paso (manual step)
-Con semáforos el flujo se vuelve más complejo. Poder avanzar instrucción por instrucción, eligiendo qué thread ejecuta, hace que el usuario entienda exactamente cuándo y por qué un thread queda bloqueado. Con la ejecución automática actual es difícil seguir la lógica.
-
-### 5. Visualización del estado de cada thread
-Mostrar junto a la traza si cada thread está `corriendo`, `bloqueado` o `terminado`. Con semáforos sin esto el usuario no entiende qué pasó.
-
-### 6. `for` loop
-Menos urgente que lo anterior, pero completa el set de control de flujo estándar. Sintaxis natural: `for(local Int i = 0; i < n; i = i + 1)`.
+- `s.acquire()` — pide un permiso. Si hay permisos disponibles (> 0), decrementa y sigue. Si no hay, bloquea el thread.
+- `s.release()` — libera un permiso. Si hay threads bloqueados, hace hand-off directo (sin incrementar). Si no hay, incrementa.
+- **Débil** (default): la estructura de espera es un Set — orden no garantizado al despertar
+- **Fuerte** (`true`): la estructura de espera es una Queue FIFO — despierta al que lleva más tiempo esperando
+- Los semáforos no pueden tener contador negativo
+- El contador no es visible desde el pseudocódigo
 
 ---
 
-Los semáforos en sí serían dos instrucciones nuevas: `wait(s)` (P) y `signal(s)` (V), donde `s` es una variable global que actúa como semáforo. `wait` bloquea el thread si el valor es 0, `signal` lo despierta y decrementa/incrementa el contador.
+## Lo que falta implementar
+
+### Clases
+
+#### Sintaxis planificada
+
+```
+class Contador {
+    local Int valor = 0
+
+    constructor(Int valorInicial) {
+        valor = valorInicial
+    }
+
+    function incrementar() {
+        valor = valor + 1
+    }
+
+    function getValor() {
+        return valor
+    }
+}
+
+global Contador c = new Contador(10)
+
+Thread(2){
+    c.incrementar()
+    print(c.getValor())
+}
+```
+
+#### Modelo de memoria
+
+Cuando un método accede a una variable, el orden de búsqueda es:
+1. Variables locales del método
+2. Atributos de la instancia
+3. Variables globales
+
+Los atributos pertenecen a la **instancia**, no a la clase. Si dos threads tienen referencia a la misma instancia, ven los mismos atributos (posible race condition). Si cada thread crea su propia instancia con `local`, no se comparte nada.
+
+#### Plan de implementación
+
+**Lexer:**
+- `class` → ya existe (`TK.CLASS`)
+- `constructor` → nueva keyword `TK.CONSTRUCTOR`
+- `this` → ya existe (`TK.THIS`)
+
+**Parser:**
+- `parseClass()` — parsea atributos, constructor y métodos. Guarda en tabla de clases compartida (similar a `funciones`).
+- `parseGlobalDecl()` / `parseLocal()` — detectar `new NombreClase(args)` para crear instancias.
+- `AccesoMetodo` ya maneja `obj.metodo(args)` — se extiende para llamadas a métodos de instancia.
+
+**Nueva clase `Instancia` (archivo propio `instancia.js`):**
+```js
+class Instancia {
+    constructor(nombreClase, memoriaInstancia, metodos)
+    // memoriaInstancia → objeto Memoria con los atributos de la instancia
+    // metodos → tabla nombre -> { params, instrucciones }
+}
+```
+
+**Nueva instrucción `LlamadaMetodo` en `instrucciones.js`:**
+- Similar a `LlamadaFuncion` pero al entrar al método activa un tercer nivel de memoria (la instancia).
+- El hilo necesita saber cuál es la instancia activa para resolver lecturas/escrituras de atributos.
+
+**`hilos.js`:**
+- Agregar `memoriaInstancia` al frame del call stack cuando se llama un método.
+- `leer(nombre)`: busca en local → instancia activa → global.
+- `escribir(nombre, valor)`: escribe en el primer nivel donde existe la variable.
+
+---
+
+### Monitores
+
+*(Pendiente de definición — el usuario explicará cómo funcionan los monitores de la materia antes de implementar.)*
+
+La idea base es que un monitor es como una clase pero con exclusión mutua implícita: cuando un thread entra a cualquier método del monitor, los demás threads que intenten entrar quedan bloqueados hasta que el primero termine.
+
+Sintaxis planificada:
+```
+monitor Buffer {
+    local Int dato = 0
+
+    constructor() {
+    }
+
+    function depositar(Int v) {
+        dato = v
+    }
+
+    function retirar() {
+        return dato
+    }
+}
+```
+
+---
+
+### Metaprogramación (post-concurrencia)
+
+Hoy `AccesoMetodo` tiene una tabla estática de métodos disponibles (`maximum`, `minimum`, `length`, `sum`). Agregar un nuevo método a un objeto requiere modificar el lexer, parser y esa tabla.
+
+**Objetivo:** que `AccesoMetodo` delegue directamente al objeto JS si tiene ese método, sin hardcodear nada. Así agregar `permisos()` a `Semaphore` solo requiere escribir el método en `semaforo.js`.
+
+Los únicos casos especiales que siempre necesitan tratamiento en el parser son `acquire`/`release` porque son métodos **bloqueantes** — generan instrucciones propias (`Acquire`/`Release`) en lugar de `AccesoMetodo`.
+
+---
+
+## Arquitectura
+
+| Archivo | Rol |
+|---|---|
+| `index.html` | UI: editor, controles, paneles de salida |
+| `style.css` | Estilos |
+| `script.js` | Orquesta UI y ejecución |
+| `lexer.js` | Tokeniza el pseudocódigo |
+| `parser.js` | Convierte tokens en instrucciones ejecutables |
+| `instrucciones.js` | Clases de instrucciones (assign, if, while, semáforos, etc.) |
+| `hilos.js` | Lógica de ejecución de cada thread |
+| `estadoGlobal.js` | Scheduler y traza |
+| `memoria.js` | Manejo de variables |
+| `semaforo.js` | Clase Semaphore con acquire/release |
+| `listaCircular.js` | Estructura para ciclos |
+| `ejemplo.js` | Ejemplos precargados por categoría |
+| `errores.js` | Clase ErrorSimulador para errores de parse y runtime |
