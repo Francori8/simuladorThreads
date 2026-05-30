@@ -1,5 +1,11 @@
 import { Ciclo, CicloRepeat, CicloForEach, While } from "./instrucciones.js";
 import Memoria from "./memoria.js";
+import { Semaphore } from "./semaforo.js";
+import { ErrorSimulador } from "./errores.js";
+
+function esSemaforo(valor) {
+  return valor instanceof Semaphore || Array.isArray(valor) && valor[0] instanceof Semaphore;
+}
 
 export default class Hilo {
   constructor(id, cache, memoriaCompartida, bloque, funciones = {}, nombre = null) {
@@ -10,6 +16,7 @@ export default class Hilo {
     this.bloque = bloque;
     this.proximaInstruccion = bloque.shift();
     this.preparado = true;
+    this.bloqueado = false;
     this.estadoGlobal = null;
     this._contexto = [];
     this._callStack = []; // frames de funciones: { bloque, proximaInstruccion, memoriaLocal, llamada }
@@ -20,10 +27,30 @@ export default class Hilo {
     this.estadoGlobal = estadoGlobal;
   }
 
-  estaPreparado() { return this.preparado; }
+  estaPreparado()  { return this.preparado; }
+  estaBloqueado()  { return this.bloqueado; }
+
+  bloquear(instruccionAcquire) {
+    this.preparado = false;
+    this.bloqueado = true;
+    this._acquirePendiente = instruccionAcquire;
+    this.informar("Bloqueado", `esperando semáforo`);
+  }
+
+  despertar() {
+    this.preparado = true;
+    this.bloqueado = false;
+    this.informar("Despertado", `semáforo liberado`);
+    if (this._acquirePendiente) {
+      this._acquirePendiente.resolverComoDesbloqueado();
+      this._acquirePendiente = null;
+    }
+  }
 
   ejecutarSiguienteInstruccion() {
-    this.proximaInstruccion.resolver(this);
+    if (!this.proximaInstruccion.estaResuelto()) {
+      this.proximaInstruccion.resolver(this);
+    }
     if (this.proximaInstruccion.estaResuelto()) {
       if (this.bloque.length === 0) {
         // Bloque vacío: si hay un frame pendiente es una función sin return explícito
@@ -45,11 +72,21 @@ export default class Hilo {
     let valor;
     if (this.memoriaCompartida.hayVariable(nombre)) {
       valor = this.memoriaCompartida.verValor(nombre);
-      this.memoriaLocal.agregarVariable(nombre, valor);
-    } else {
+      if (!esSemaforo(valor)) {
+        this.memoriaLocal.agregarVariable(nombre, valor);
+      }
+    } else if (this.memoriaLocal.hayVariable(nombre)) {
       valor = this.memoriaLocal.verValor(nombre);
+    } else {
+      throw ErrorSimulador.runtime(
+        `Variable "${nombre}" no está declarada`,
+        this.id,
+        this.proximaInstruccion?.toString()
+      );
     }
-    this.informar("Lectura", `local.${nombre} : ${valor}`);
+    if (!esSemaforo(valor)) {
+      this.informar("Lectura", `local.${nombre} : ${valor}`);
+    }
     return valor;
   }
 
@@ -163,12 +200,36 @@ export default class Hilo {
     let arr;
     if (this.memoriaCompartida.hayVariable(nombre)) {
       arr = this.memoriaCompartida.verValor(nombre);
-      this.memoriaLocal.agregarVariable(nombre, [...arr]);
-    } else {
+      if (!esSemaforo(arr)) {
+        this.memoriaLocal.agregarVariable(nombre, [...arr]);
+      }
+    } else if (this.memoriaLocal.hayVariable(nombre)) {
       arr = this.memoriaLocal.verValor(nombre);
+    } else {
+      throw ErrorSimulador.runtime(
+        `Variable "${nombre}" no está declarada`,
+        this.id,
+        this.proximaInstruccion?.toString()
+      );
+    }
+    if (!Array.isArray(arr) && !(arr instanceof Semaphore)) {
+      throw ErrorSimulador.runtime(
+        `"${nombre}" no es una lista (es ${typeof arr})`,
+        this.id,
+        this.proximaInstruccion?.toString()
+      );
+    }
+    if (Array.isArray(arr) && (indice < 0 || indice >= arr.length)) {
+      throw ErrorSimulador.runtime(
+        `Índice ${indice} fuera de rango en "${nombre}" (tamaño ${arr.length})`,
+        this.id,
+        this.proximaInstruccion?.toString()
+      );
     }
     const valor = arr[indice];
-    this.informar("Lectura[]", `${nombre}[${indice}] : ${valor}`);
+    if (!esSemaforo(valor)) {
+      this.informar("Lectura[]", `${nombre}[${indice}] : ${valor}`);
+    }
     return valor;
   }
 

@@ -1,6 +1,8 @@
 import { Lexer, TK } from "./lexer.js";
 import Memoria from "./memoria.js";
 import Hilo from "./hilos.js";
+import { Semaphore } from "./semaforo.js";
+import { ErrorSimulador } from "./errores.js";
 import {
   Sumar, Restar, Multiplicar, Dividir,
   Imprimir, ValorFijo, Literal, ListaLiteral, AccesoMetodo,
@@ -11,7 +13,61 @@ import {
   YLogico, OLogico, Repeat, For, ForEach,
   LecturaIndexada, EscrituraIndexada, Maximo, Negacion, GetId,
   LlamadaFuncion, Return,
+  Acquire, Release,
 } from "./instrucciones.js";
+
+// ─── Nombres legibles para tokens ────────────────────────────────────────────
+
+const NOMBRES_TOKEN = {
+  LPAREN:         '"("',
+  RPAREN:         '")"',
+  LBRACE:         '"{"',
+  RBRACE:         '"}"',
+  LBRACKET:       '"["',
+  RBRACKET:       '"]"',
+  COMMA:          '","',
+  DOT:            '"."',
+  SEMICOLON:      '";"',
+  ASSIGN:         '"="',
+  EQ:             '"=="',
+  NEQ:            '"!="',
+  LT:             '"<"',
+  GT:             '">"',
+  LTE:            '"<="',
+  GTE:            '">="',
+  PLUS:           '"+"',
+  MINUS:          '"-"',
+  STAR:           '"*"',
+  SLASH:          '"/"',
+  AND:            '"&&"',
+  OR:             '"||"',
+  NOT:            '"!"',
+  IDENT:          "un identificador",
+  NUMBER:         "un número",
+  STRING:         "un texto",
+  BOOL:           '"true" o "false"',
+  TYPE_INT:       '"Int"',
+  TYPE_BOOL:      '"Bool"',
+  TYPE_STRING:    '"String"',
+  TYPE_LIST:      '"List"',
+  TYPE_SEMAPHORE: '"Semaphore"',
+  NEW:            '"new"',
+  GLOBAL:         '"global"',
+  LOCAL:          '"local"',
+  IF:             '"if"',
+  ELSE:           '"else"',
+  WHILE:          '"while"',
+  FOR:            '"for"',
+  REPEAT:         '"repeat"',
+  RETURN:         '"return"',
+  THREAD:         '"Thread"',
+  FUNCTION:       '"function"',
+  EOF:            "fin del programa",
+};
+
+function legible(tipo) {
+  return NOMBRES_TOKEN[tipo] ?? `'${tipo}'`;
+}
 
 // ─── Parser recursivo descendente ────────────────────────────────────────────
 
@@ -40,13 +96,21 @@ class Parser {
   expect(type) {
     const tok = this.peek();
     if (tok.type !== type)
-      throw new Error(`Parser (línea ${tok.line}): se esperaba '${type}' pero se encontró '${tok.type}' (${JSON.stringify(tok.value)})`);
+      throw ErrorSimulador.parse(
+        `Se esperaba ${legible(type)} pero se encontró ${legible(tok.type)} (${JSON.stringify(tok.value)})`,
+        tok.line
+      );
     return this.advance();
   }
 
   isType(type) {
     return type === TK.TYPE_INT || type === TK.TYPE_BOOL ||
-           type === TK.TYPE_STRING || type === TK.TYPE_LIST;
+           type === TK.TYPE_STRING || type === TK.TYPE_LIST ||
+           type === TK.TYPE_SEMAPHORE;
+  }
+
+  isSemaphoreType() {
+    return this.check(TK.TYPE_SEMAPHORE);
   }
 
   // ── Top-level ──────────────────────────────────────────────────────────────
@@ -72,12 +136,58 @@ class Parser {
   }
 
   parseGlobalDecl() {
-    this.advance(); // consume type keyword (Int, Bool, String, List)
+    const typeTok = this.advance(); // consume type keyword
+
+    // global Semaphore s = new Semaphore(n, bool?)
+    // global Semaphore[] sems = new Semaphore[k](n, bool?)
+    if (typeTok.type === TK.TYPE_SEMAPHORE) {
+      const esArray = !!this.match(TK.LBRACKET);
+      if (esArray) this.expect(TK.RBRACKET);
+      const name = this.expect(TK.IDENT).value;
+      this.expect(TK.ASSIGN);
+      const value = esArray
+        ? this.parseNewSemaphoreArray()
+        : this.parseNewSemaphore();
+      this.match(TK.SEMICOLON);
+      return { name, value };
+    }
+
     const name = this.expect(TK.IDENT).value;
     let value;
     if (this.match(TK.ASSIGN)) value = this.parseLiteralValue();
     this.match(TK.SEMICOLON);
     return { name, value };
+  }
+
+  // new Semaphore(permisos, fuerte?)
+  parseNewSemaphore() {
+    this.expect(TK.NEW);
+    this.expect(TK.TYPE_SEMAPHORE);
+    this.expect(TK.LPAREN);
+    const permisos = this.expect(TK.NUMBER).value;
+    let fuerte = false;
+    if (this.match(TK.COMMA)) {
+      fuerte = this.expect(TK.BOOL).value;
+    }
+    this.expect(TK.RPAREN);
+    return new Semaphore(permisos, fuerte);
+  }
+
+  // new Semaphore[k](permisos, fuerte?)
+  parseNewSemaphoreArray() {
+    this.expect(TK.NEW);
+    this.expect(TK.TYPE_SEMAPHORE);
+    this.expect(TK.LBRACKET);
+    const cantidad = this.expect(TK.NUMBER).value;
+    this.expect(TK.RBRACKET);
+    this.expect(TK.LPAREN);
+    const permisos = this.expect(TK.NUMBER).value;
+    let fuerte = false;
+    if (this.match(TK.COMMA)) {
+      fuerte = this.expect(TK.BOOL).value;
+    }
+    this.expect(TK.RPAREN);
+    return Array.from({ length: cantidad }, () => new Semaphore(permisos, fuerte));
   }
 
   // Evalúa un literal de forma eager (para inicialización de globales)
@@ -101,7 +211,7 @@ class Parser {
       this.advance();
       return this.mem.hayVariable(tok.value) ? this.mem.verValor(tok.value) : tok.value;
     }
-    throw new Error(`Parser (línea ${tok.line}): literal inválido: ${tok.type}`);
+    throw ErrorSimulador.parse(`Valor inválido: '${tok.value}'`, tok.line);
   }
 
   parseFunction() {
@@ -406,7 +516,13 @@ class Parser {
           }
           this.expect(TK.RPAREN);
         }
-        expr = new AccesoMetodo(expr, method, args);
+        if (method === 'acquire') {
+          expr = new Acquire(expr);
+        } else if (method === 'release') {
+          expr = new Release(expr);
+        } else {
+          expr = new AccesoMetodo(expr, method, args);
+        }
 
       } else if (this.check(TK.LBRACKET)) {
         // Lectura indexada: solo llega acá si parseAssignment no tomó el control
@@ -492,10 +608,10 @@ class Parser {
       return new Lectura(name);
     }
 
-    // Fallback: consumir y devolver null
-    console.warn(`Parser: token inesperado ${tok.type} ('${tok.value}') en línea ${tok.line}`);
-    this.advance();
-    return new Literal(null);
+    throw ErrorSimulador.parse(
+      `Token inesperado: '${tok.value}'`,
+      tok.line
+    );
   }
 }
 

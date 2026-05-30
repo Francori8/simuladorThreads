@@ -9,10 +9,11 @@ export const TK = Object.freeze({
   BOOL:   "BOOL",
 
   // Tipos / keywords
-  TYPE_INT:    "TYPE_INT",
-  TYPE_BOOL:   "TYPE_BOOL",
-  TYPE_STRING: "TYPE_STRING",
-  TYPE_LIST:   "TYPE_LIST",
+  TYPE_INT:       "TYPE_INT",
+  TYPE_BOOL:      "TYPE_BOOL",
+  TYPE_STRING:    "TYPE_STRING",
+  TYPE_LIST:      "TYPE_LIST",
+  TYPE_SEMAPHORE: "TYPE_SEMAPHORE",
 
   // Keywords de control
   IF:      "IF",
@@ -78,10 +79,13 @@ export const TK = Object.freeze({
 });
 
 const KEYWORDS = {
-  "Int":     TK.TYPE_INT,
-  "Bool":    TK.TYPE_BOOL,
-  "String":  TK.TYPE_STRING,
-  "List":    TK.TYPE_LIST,
+  "Int":       TK.TYPE_INT,
+  "Bool":      TK.TYPE_BOOL,
+  "String":    TK.TYPE_STRING,
+  "List":      TK.TYPE_LIST,
+  "Semaphore": TK.TYPE_SEMAPHORE,
+  "acquire":   TK.IDENT,
+  "release":   TK.IDENT,
   "if":      TK.IF,
   "else":    TK.ELSE,
   "while":   TK.WHILE,

@@ -1,4 +1,5 @@
 import { ListaCircular } from "./listaCircular.js";
+import { ErrorSimulador } from "./errores.js";
 
 class Instruccion {
   constructor() {
@@ -275,6 +276,7 @@ export class Ciclo extends Instruccion {
     this.condicion = condicion;
     this.bloque = new ListaCircular(bloque);
     this.maximo = maximo;
+    this._evaluandoCondicion = false;
   }
 
   terminado() { this.resuelto = true; }
@@ -283,7 +285,8 @@ export class Ciclo extends Instruccion {
     super.reiniciar();
     this.maximo--;
     this.condicion.reiniciar();
-    this.bloque.reiniciarTodos();
+    this._evaluandoCondicion = false;
+    // El bloque ya fue reiniciado al detectar el fin de vuelta en resolver()
   }
 
   resolver(hilo) {
@@ -293,19 +296,31 @@ export class Ciclo extends Instruccion {
       return;
     }
 
+    // Mientras evaluamos la condición, no ejecutar el bloque
+    if (this._evaluandoCondicion) {
+      if (!this.condicion.estaResuelto()) {
+        hilo.pushContexto(this.condicion);
+        this.condicion.resolver(hilo);
+        hilo.popContexto();
+      } else {
+        this._evaluandoCondicion = false;
+        hilo.resolverSeguirCiclo(this.condicion.resolverPuro(), this);
+      }
+      return;
+    }
+
     const siguiente = this.bloque.siguienteElemento();
 
     if (siguiente.estaResuelto()) {
       this.bloque.pasarElemento();
       const proxima = this.bloque.siguienteElemento();
       if (proxima.estaResuelto()) {
-        if (!this.condicion.estaResuelto()) {
-          hilo.pushContexto(this.condicion);
-          this.condicion.resolver(hilo);
-          hilo.popContexto();
-        } else {
-          hilo.resolverSeguirCiclo(this.condicion.resolverPuro(), this);
-        }
+        // Fin de vuelta: reiniciar bloque y pasar a evaluar condición
+        this.bloque.reiniciarTodos();
+        this._evaluandoCondicion = true;
+        hilo.pushContexto(this.condicion);
+        this.condicion.resolver(hilo);
+        hilo.popContexto();
       }
     } else {
       hilo.pushContexto(siguiente);
@@ -723,7 +738,7 @@ export class AccesoMetodo extends Instruccion {
     const obj  = this.objetoExpr.resolverPuro();
     const args = this.argsExprs.map(a => a.resolverPuro());
     const fn   = AccesoMetodo.METODOS[this.metodo];
-    if (!fn) throw new Error(`Método desconocido: ${this.metodo}`);
+    if (!fn) throw ErrorSimulador.runtime(`Método desconocido: "${this.metodo}"`);
     this.resultado = fn(obj, ...args);
     hilo.informar("Método", `${this.metodo}(${obj}) = ${this.resultado}`);
     this.resuelto = true;
@@ -818,6 +833,66 @@ export class Return extends Instruccion {
   }
 
   toString() { return `return ${this.expr}`; }
+}
+
+// --- Semáforos ---
+
+// Instrucción s.acquire(): bloquea el hilo si no hay permisos disponibles.
+// Si el hilo queda bloqueado, esta instrucción NO se marca resuelta.
+// Cuando el hilo sea despertado, despertar() llama resolverComoDesbloqueado()
+// para marcarla resuelta y el hilo avanza normalmente.
+export class Acquire extends Instruccion {
+  constructor(semExpr) {
+    super();
+    this.semExpr = semExpr; // expresión que resuelve al objeto Semaphore
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.semExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.semExpr.estaResuelto()) {
+      this.semExpr.resolver(hilo);
+      return;
+    }
+    const sem = this.semExpr.resolverPuro();
+    const ok = sem.acquire(hilo, this);
+    if (ok) this.resuelto = true;
+  }
+
+  // Llamado por Hilo.despertar() cuando el semáforo hace hand-off
+  resolverComoDesbloqueado() {
+    this.resuelto = true;
+  }
+
+  toString() { return `${this.semExpr}.acquire()`; }
+}
+
+// Instrucción s.release(): libera un permiso o hace hand-off a un thread bloqueado.
+export class Release extends Instruccion {
+  constructor(semExpr) {
+    super();
+    this.semExpr = semExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.semExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.semExpr.estaResuelto()) {
+      this.semExpr.resolver(hilo);
+      return;
+    }
+    const sem = this.semExpr.resolverPuro();
+    sem.release(hilo);
+    this.resuelto = true;
+  }
+
+  toString() { return `${this.semExpr}.release()`; }
 }
 
 export class Maximo extends Instruccion {
