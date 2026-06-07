@@ -3,6 +3,8 @@ import Memoria from "./memoria.js";
 import Hilo from "./hilos.js";
 import { Semaphore } from "./semaforo.js";
 import { ErrorSimulador } from "./errores.js";
+import { Clase } from "./clase.js";
+import { Monitor } from "./monitor.js";
 import {
   Sumar, Restar, Multiplicar, Dividir,
   Imprimir, ValorFijo, Literal, ListaLiteral, AccesoMetodo,
@@ -12,8 +14,9 @@ import {
   While, Mayor, MayorOIgual, Menor, MenorOIgual,
   YLogico, OLogico, Repeat, For, ForEach,
   LecturaIndexada, EscrituraIndexada, Maximo, Negacion, GetId,
-  LlamadaFuncion, Return,
+  LlamadaFuncion, LlamadaMetodo, NuevaInstancia, LecturaThis, Return,
   Acquire, Release,
+  EntradaMonitor, SalidaMonitor, Wait, Notify, NotifyAll, LecturaCondicion,
 } from "./instrucciones.js";
 
 // ─── Nombres legibles para tokens ────────────────────────────────────────────
@@ -72,13 +75,15 @@ function legible(tipo) {
 // ─── Parser recursivo descendente ────────────────────────────────────────────
 
 class Parser {
-  constructor(tokens, mem, consola, limite, funciones = {}) {
+  constructor(tokens, mem, consola, limite, funciones = {}, clases = {}, monitores = {}) {
     this.tokens    = tokens;
     this.pos       = 0;
     this.mem       = mem;
     this.consola   = consola;
     this.limite    = limite;
     this.funciones = funciones; // tabla compartida: nombre -> { params, instrucciones }
+    this.clases    = clases;    // tabla compartida: nombre -> Clase
+    this.monitores = monitores; // tabla compartida: nombre -> Monitor
   }
 
   // ── Utilidades de navegación ───────────────────────────────────────────────
@@ -127,12 +132,156 @@ class Parser {
         threads.push(this.parseThread());
       } else if (this.check(TK.FUNCTION)) {
         this.parseFunction();
+      } else if (this.check(TK.CLASS)) {
+        this.parseClass();
+      } else if (this.check(TK.MONITOR)) {
+        this.parseMonitor();
       } else {
         this.advance();
       }
     }
 
     return { globals, threads };
+  }
+
+  // class NombreClase { atributos, constructor, métodos }
+  parseClass() {
+    this.expect(TK.CLASS);
+    const nombre = this.expect(TK.IDENT).value;
+    this.expect(TK.LBRACE);
+
+    const atributosDefault = {};
+    const metodos = {};
+    let constructorDef = null;
+
+    while (!this.check(TK.RBRACE) && !this.check(TK.EOF)) {
+      if (this.check(TK.LOCAL)) {
+        // Atributo: local Tipo nombre = valorDefault
+        // El tipo puede ser primitivo (Int, Bool, etc.) o el nombre de una clase
+        this.advance();
+        let tipoClaseAtributo = null;
+        if (this.isType(this.peek().type)) {
+          this.advance(); // tipo primitivo, ignorar
+        } else if (this.check(TK.IDENT) && this.clases[this.peek().value]) {
+          tipoClaseAtributo = this.peek().value; // nombre de clase
+          this.advance();
+        }
+        const attrNombre = this.expect(TK.IDENT).value;
+        let valorDefault = null;
+        if (this.match(TK.ASSIGN)) {
+          if (tipoClaseAtributo && this.check(TK.NEW)) {
+            // local NombreClase attr = new NombreClase(args)
+            valorDefault = this._parseNewInstanciaEager(this.clases[tipoClaseAtributo]);
+          } else {
+            valorDefault = this.parseLiteralValue();
+          }
+        }
+        this.match(TK.SEMICOLON);
+        atributosDefault[attrNombre] = valorDefault;
+
+      } else if (this.check(TK.CONSTRUCTOR)) {
+        // constructor(params) { cuerpo }
+        this.advance();
+        this.expect(TK.LPAREN);
+        const params = [];
+        while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+          if (this.isType(this.peek().type)) this.advance();
+          params.push(this.expect(TK.IDENT).value);
+          this.match(TK.COMMA);
+        }
+        this.expect(TK.RPAREN);
+        this.expect(TK.LBRACE);
+        const instrucciones = this.parseBody();
+        constructorDef = { params, instrucciones };
+
+      } else if (this.check(TK.FUNCTION)) {
+        // function TipoOpc nombreMetodo(params) { cuerpo }
+        this.advance();
+        if (this.isType(this.peek().type)) this.advance();
+        const metodoNombre = this.expect(TK.IDENT).value;
+        this.expect(TK.LPAREN);
+        const params = [];
+        while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+          if (this.isType(this.peek().type)) this.advance();
+          params.push(this.expect(TK.IDENT).value);
+          this.match(TK.COMMA);
+        }
+        this.expect(TK.RPAREN);
+        this.expect(TK.LBRACE);
+        const instrucciones = this.parseBody();
+        metodos[metodoNombre] = { params, instrucciones };
+
+      } else {
+        this.advance(); // ignorar tokens desconocidos dentro de la clase
+      }
+    }
+    this.expect(TK.RBRACE);
+
+    this.clases[nombre] = new Clase(nombre, atributosDefault, metodos, constructorDef);
+  }
+
+  // monitor NombreMonitor { condition cond; atributos; constructor; métodos }
+  parseMonitor() {
+    this.expect(TK.MONITOR);
+    const nombre = this.expect(TK.IDENT).value;
+    this.expect(TK.LBRACE);
+
+    const atributosDefault = {};
+    const metodos          = {};
+    const condiciones      = []; // nombres de variables de condición explícitas
+    let   constructorDef   = null;
+
+    while (!this.check(TK.RBRACE) && !this.check(TK.EOF)) {
+      if (this.check(TK.CONDITION)) {
+        // condition nombreVar
+        this.advance();
+        condiciones.push(this.expect(TK.IDENT).value);
+        this.match(TK.SEMICOLON);
+
+      } else if (this.check(TK.LOCAL)) {
+        this.advance();
+        if (this.isType(this.peek().type)) this.advance();
+        const attrNombre = this.expect(TK.IDENT).value;
+        let valorDefault = null;
+        if (this.match(TK.ASSIGN)) valorDefault = this.parseLiteralValue();
+        this.match(TK.SEMICOLON);
+        atributosDefault[attrNombre] = valorDefault;
+
+      } else if (this.check(TK.CONSTRUCTOR)) {
+        this.advance();
+        this.expect(TK.LPAREN);
+        const params = [];
+        while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+          if (this.isType(this.peek().type)) this.advance();
+          params.push(this.expect(TK.IDENT).value);
+          this.match(TK.COMMA);
+        }
+        this.expect(TK.RPAREN);
+        this.expect(TK.LBRACE);
+        constructorDef = { params, instrucciones: this.parseBody() };
+
+      } else if (this.check(TK.FUNCTION)) {
+        this.advance();
+        if (this.isType(this.peek().type)) this.advance();
+        const metodoNombre = this.expect(TK.IDENT).value;
+        this.expect(TK.LPAREN);
+        const params = [];
+        while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+          if (this.isType(this.peek().type)) this.advance();
+          params.push(this.expect(TK.IDENT).value);
+          this.match(TK.COMMA);
+        }
+        this.expect(TK.RPAREN);
+        this.expect(TK.LBRACE);
+        metodos[metodoNombre] = { params, instrucciones: this.parseBody() };
+
+      } else {
+        this.advance();
+      }
+    }
+    this.expect(TK.RBRACE);
+
+    this.monitores[nombre] = new Monitor(nombre, atributosDefault, metodos, constructorDef, condiciones);
   }
 
   parseGlobalDecl() {
@@ -152,11 +301,118 @@ class Parser {
       return { name, value };
     }
 
+    // global NombreClase c = new NombreClase(args)
+    if (typeTok.type === TK.IDENT && this.clases[typeTok.value]) {
+      const nombreClase = typeTok.value;
+      const clase       = this.clases[nombreClase];
+      const name        = this.expect(TK.IDENT).value;
+      this.expect(TK.ASSIGN);
+      const instancia = this._parseNewInstanciaEager(clase);
+      this.match(TK.SEMICOLON);
+      return { name, value: instancia };
+    }
+
+    // global NombreMonitor m = new NombreMonitor(args)
+    if (typeTok.type === TK.IDENT && this.monitores[typeTok.value]) {
+      const nombreMonitor = typeTok.value;
+      const monitor       = this.monitores[nombreMonitor];
+      const name          = this.expect(TK.IDENT).value;
+      this.expect(TK.ASSIGN);
+      const instancia = this._parseNewMonitorEager(monitor);
+      this.match(TK.SEMICOLON);
+      return { name, value: instancia };
+    }
+
     const name = this.expect(TK.IDENT).value;
     let value;
     if (this.match(TK.ASSIGN)) value = this.parseLiteralValue();
     this.match(TK.SEMICOLON);
     return { name, value };
+  }
+
+  // Parsea new NombreClase(args) de forma eager (para variables globales).
+  // El constructor no se ejecuta aquí — los atributos quedan en su valor default.
+  // Los args del constructor se evalúan como literales.
+  _parseNewInstanciaEager(clase) {
+    this.expect(TK.NEW);
+    this.expect(TK.IDENT); // consume el nombre de la clase otra vez
+    this.expect(TK.LPAREN);
+    const args = [];
+    while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+      args.push(this.parseLiteralValue());
+      this.match(TK.COMMA);
+    }
+    this.expect(TK.RPAREN);
+    // Crear instancia con atributos default. El constructor se saltea para globales
+    // porque se ejecuta antes de que los hilos existan. Para la semántica educativa
+    // esto es aceptable: el constructor puede usarse en locales donde hay interleaving.
+    const instancia = clase.instanciar();
+    // Aplicar constructor en forma eager si existe y solo usa literales
+    if (clase.constructorDef) {
+      const ctor = clase.constructorDef;
+      // Ejecutar las instrucciones del constructor de forma eager (sin hilo)
+      // usando una mini-memoria para los parámetros
+      const miniMem = new Memoria();
+      ctor.params.forEach((p, i) => miniMem.agregarVariable(p, args[i] ?? null));
+      this._ejecutarConstructorEager(ctor.instrucciones, instancia.memoriaInstancia, miniMem);
+    }
+    return instancia;
+  }
+
+  // Ejecuta instrucciones simples de un constructor en forma eager (sin scheduler).
+  // Solo soporta asignaciones directas de literales o parámetros — suficiente para inicialización.
+  _ejecutarConstructorEager(instrucciones, memInstancia, memParams) {
+    for (const instr of instrucciones) {
+      // Solo procesamos Escritura o InicializarLocal simples
+      const s = instr.toString();
+      // Estrategia simple: evaluar cada instrucción con un mini-evaluador
+      if (instr.constructor.name === 'Escritura' || instr.constructor.name === 'InicializarLocal') {
+        const nombre = instr.nombre ?? instr.nombre;
+        // Intentar resolver el valor como literal o parámetro
+        const expr = instr.valor ?? instr.expresion;
+        const valor = this._resolverExprEager(expr, memInstancia, memParams);
+        if (valor !== undefined) {
+          memInstancia.agregarVariable(nombre, valor);
+        }
+      }
+    }
+  }
+
+  _resolverExprEager(expr, memInstancia, memParams) {
+    if (!expr) return undefined;
+    const tipo = expr.constructor.name;
+    if (tipo === 'Literal') return expr.valor;
+    if (tipo === 'Lectura') {
+      const n = expr.variable;
+      if (memParams.hayVariable(n)) return memParams.verValor(n);
+      if (memInstancia.hayVariable(n)) return memInstancia.verValor(n);
+      return undefined;
+    }
+    if (tipo === 'Sumar') {
+      const a = this._resolverExprEager(expr.izq, memInstancia, memParams);
+      const b = this._resolverExprEager(expr.der, memInstancia, memParams);
+      return (a !== undefined && b !== undefined) ? a + b : undefined;
+    }
+    if (tipo === 'Restar') {
+      const a = this._resolverExprEager(expr.izq, memInstancia, memParams);
+      const b = this._resolverExprEager(expr.der, memInstancia, memParams);
+      return (a !== undefined && b !== undefined) ? a - b : undefined;
+    }
+    return undefined;
+  }
+
+  // new NombreMonitor(args) eager — crea la instancia antes de lanzar hilos
+  _parseNewMonitorEager(monitor) {
+    this.expect(TK.NEW);
+    this.expect(TK.IDENT); // consume el nombre del monitor
+    this.expect(TK.LPAREN);
+    const args = [];
+    while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+      args.push(this.parseLiteralValue());
+      this.match(TK.COMMA);
+    }
+    this.expect(TK.RPAREN);
+    return monitor.instanciar();
   }
 
   // new Semaphore(permisos, fuerte?)
@@ -294,7 +550,17 @@ class Parser {
   parseLocal() {
     this.expect(TK.LOCAL);
 
-    // Consume tipo opcional
+    // Detectar si el tipo es un nombre de clase: local NombreClase c = new NombreClase(args)
+    if (this.check(TK.IDENT) && this.clases[this.peek().value]) {
+      const nombreClase = this.advance().value;
+      const name        = this.expect(TK.IDENT).value;
+      this.expect(TK.ASSIGN);
+      const expr = this._parseNewInstanciaExpr(nombreClase);
+      this.match(TK.SEMICOLON);
+      return [new InicializarLocal(name, expr)];
+    }
+
+    // Consume tipo simple opcional
     if (this.isType(this.peek().type)) this.advance();
 
     const name = this.expect(TK.IDENT).value;
@@ -307,6 +573,20 @@ class Parser {
 
     this.match(TK.SEMICOLON);
     return [new InicializarLocal(name, new Literal(0))];
+  }
+
+  // Parsea new NombreClase(args) como expresión con interleaving.
+  _parseNewInstanciaExpr(nombreClase) {
+    this.expect(TK.NEW);
+    this.expect(TK.IDENT); // consume el nombre de la clase
+    this.expect(TK.LPAREN);
+    const args = [];
+    while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+      args.push(this.parseExpr());
+      this.match(TK.COMMA);
+    }
+    this.expect(TK.RPAREN);
+    return new NuevaInstancia(nombreClase, args);
   }
 
   parseIf() {
@@ -509,7 +789,8 @@ class Parser {
         this.advance();
         const method = this.expect(TK.IDENT).value;
         let args = [];
-        if (this.match(TK.LPAREN)) {
+        const tieneLlamada = !!this.match(TK.LPAREN);
+        if (tieneLlamada) {
           while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
             args.push(this.parseExpr());
             this.match(TK.COMMA);
@@ -520,7 +801,19 @@ class Parser {
           expr = new Acquire(expr);
         } else if (method === 'release') {
           expr = new Release(expr);
+        } else if (method === 'wait') {
+          // condicion.wait() o this.wait() — la expr es la condición o el monitor
+          expr = new Wait(new LecturaCondicion('_default'));
+        } else if (method === 'notify') {
+          expr = new Notify(new LecturaCondicion('_default'));
+        } else if (method === 'notifyAll') {
+          expr = new NotifyAll(new LecturaCondicion('_default'));
+        } else if (tieneLlamada) {
+          // Con paréntesis: puede ser método de instancia o método built-in (length, etc.)
+          // LlamadaMetodo hace dispatch en runtime según el tipo del objeto
+          expr = new LlamadaMetodo(expr, method, args);
         } else {
+          // Sin paréntesis: propiedad (ej: lista.length)
           expr = new AccesoMetodo(expr, method, args);
         }
 
@@ -552,6 +845,11 @@ class Parser {
       const expr = this.parseExpr();
       this.expect(TK.RPAREN);
       return expr;
+    }
+
+    if (tok.type === TK.THIS) {
+      this.advance();
+      return new LecturaThis();
     }
 
     if (tok.type === TK.LBRACKET) {
@@ -586,6 +884,19 @@ class Parser {
           this.expect(TK.RPAREN);
           return new GetId();
         }
+        // wait/notify/notifyAll sin receptor explícito — usan condición default
+        if (name === 'wait') {
+          this.expect(TK.RPAREN);
+          return new Wait(new LecturaCondicion('_default'));
+        }
+        if (name === 'notify') {
+          this.expect(TK.RPAREN);
+          return new Notify(new LecturaCondicion('_default'));
+        }
+        if (name === 'notifyAll') {
+          this.expect(TK.RPAREN);
+          return new NotifyAll(new LecturaCondicion('_default'));
+        }
         // Función definida por el usuario
         if (this.funciones[name]) {
           const args = [];
@@ -618,13 +929,15 @@ class Parser {
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
-  // Primera pasada: obtener globals, threads y construir la tabla de funciones
-  const tokens = new Lexer(textoRaw).tokenize();
-  const funciones = {}; // tabla compartida entre todos los hilos
-  const parser = new Parser(tokens, mem, consola, limiteRepeticiones, funciones);
+  // Primera pasada: obtener globals, threads, funciones y clases
+  const tokens    = new Lexer(textoRaw).tokenize();
+  const funciones = {};
+  const clases    = {};
+  const monitores = {};
+  const parser = new Parser(tokens, mem, consola, limiteRepeticiones, funciones, clases, monitores);
   const { globals, threads } = parser.parseProgram();
 
-  // Inicializar variables globales
+  // Inicializar variables globales (incluye instancias creadas eager)
   for (const { name, value } of globals) {
     if (value !== undefined) mem.agregarVariable(name, value);
   }
@@ -642,19 +955,22 @@ export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
     for (let i = 0; i < num; i++) {
       // Re-parsear por cada hilo para que cada uno tenga sus propias
       // instancias de instrucción y no compartan estado (resuelto, resultado, etc.)
-      // Se pasa la misma tabla de funciones para que las llamadas la encuentren,
-      // pero cada hilo re-parsea las instrucciones de su bloque Thread.
-      const tokensCopia = new Lexer(textoRaw).tokenize();
-      const funcionesCopia = {}; // las instrucciones de funciones también se re-parsean
-      const parserCopia = new Parser(tokensCopia, mem, consola, limiteRepeticiones, funcionesCopia);
+      // Tanto funciones como clases se re-parsean: sus instrucciones son estado mutable.
+      const tokensCopia    = new Lexer(textoRaw).tokenize();
+      const funcionesCopia  = {};
+      const clasesCopia     = {};
+      const monitoresCopia  = {};
+      const parserCopia     = new Parser(tokensCopia, mem, consola, limiteRepeticiones, funcionesCopia, clasesCopia, monitoresCopia);
       const { threads: threadsCopia } = parserCopia.parseProgram();
       hilos.push(new Hilo(
         idThread++,
         new Memoria(),
         mem,
         threadsCopia[ti].instrucciones,
-        funcionesCopia,  // cada hilo tiene su propia copia de las instrucciones de funciones
-        nombre ?? null
+        funcionesCopia,
+        nombre ?? null,
+        clasesCopia,
+        monitoresCopia,
       ));
     }
   }

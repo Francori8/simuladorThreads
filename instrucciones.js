@@ -1,5 +1,7 @@
 import { ListaCircular } from "./listaCircular.js";
 import { ErrorSimulador } from "./errores.js";
+import { Instancia } from "./clase.js";
+import { InstanciaMonitor } from "./monitor.js";
 
 class Instruccion {
   constructor() {
@@ -286,7 +288,16 @@ export class Ciclo extends Instruccion {
     this.maximo--;
     this.condicion.reiniciar();
     this._evaluandoCondicion = false;
-    // El bloque ya fue reiniciado al detectar el fin de vuelta en resolver()
+    // El bloque se reinicia al fin de cada vuelta en resolver()
+  }
+
+  reiniciarParaLlamada() {
+    this.resuelto = false;
+    this.condicion.reiniciar();
+    this._evaluandoCondicion = false;
+    // Reiniciar cada instrucción del bloque recursivamente
+    this.bloque.lista.forEach(i => i.reiniciarParaLlamada ? i.reiniciarParaLlamada() : i.reiniciar());
+    this.bloque.indice = 0;
   }
 
   resolver(hilo) {
@@ -578,6 +589,22 @@ export class Negacion extends Instruccion {
   toString() { return `(!${this.expr})`; }
 }
 
+// Resuelve a la instancia activa en el call stack del hilo.
+// Se usa para implementar `this` dentro de métodos de clase.
+export class LecturaThis extends Instruccion {
+  resolver(hilo) {
+    this.resultado = hilo.getInstanciaActiva();
+    if (!this.resultado) {
+      throw ErrorSimulador.runtime(`"this" usado fuera de un método de instancia`);
+    }
+    hilo.informar("This", `${this.resultado}`);
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `this`; }
+}
+
 export class GetId extends Instruccion {
   resolver(hilo) {
     this.resultado = hilo.getId();
@@ -835,6 +862,167 @@ export class Return extends Instruccion {
   toString() { return `return ${this.expr}`; }
 }
 
+// Crea una instancia de una clase y ejecuta su constructor con interleaving.
+// Se usa como expresión: new MiClase(args) → devuelve la Instancia via resolverPuro().
+// El Escritura o InicializarLocal que la envuelve hace la asignación.
+export class NuevaInstancia extends Instruccion {
+  constructor(nombreClase, argsExprs) {
+    super();
+    this.nombreClase = nombreClase; // string — lookup en hilo.clases en runtime
+    this.argsExprs   = argsExprs;
+    this.argIdx      = 0;
+    this.enEjecucion = false;
+    this._instancia  = null;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.argIdx      = 0;
+    this.enEjecucion = false;
+    this._instancia  = null;
+    this.argsExprs.forEach(a => a.reiniciar());
+  }
+
+  resolver(hilo) {
+    // Fase 1: evaluar argumentos del constructor de a uno
+    while (this.argIdx < this.argsExprs.length) {
+      const arg = this.argsExprs[this.argIdx];
+      if (!arg.estaResuelto()) {
+        arg.resolver(hilo);
+        return;
+      }
+      this.argIdx++;
+    }
+
+    // Fase 2: crear la instancia y llamar al constructor (una sola vez)
+    if (!this.enEjecucion) {
+      this.enEjecucion = true;
+      // Buscar la clase en la tabla del hilo (instrucciones frescas por hilo)
+      const clase = hilo.clases[this.nombreClase];
+      if (!clase) throw ErrorSimulador.runtime(`Clase desconocida: "${this.nombreClase}"`);
+      this._instancia = clase.instanciar();
+      const valoresArgs = this.argsExprs.map(a => a.resolverPuro());
+      hilo.informar("New", `${this.nombreClase}(${valoresArgs.join(", ")})`);
+
+      const ctor = clase.constructorDef;
+      if (ctor && ctor.instrucciones.length > 0) {
+        // Empujar frame del constructor — el scheduler puede interleave aquí
+        hilo.llamarMetodo(
+          "constructor", ctor.params, ctor.instrucciones,
+          valoresArgs, this._instancia, this
+        );
+        return;
+      }
+      // Sin constructor: ya está lista
+      this.resultado = this._instancia;
+      this.resuelto  = true;
+    }
+    // Fase 3: el frame del constructor ya terminó (resolve() fue llamado)
+  }
+
+  // Llamado por hilos.js cuando el constructor retorna
+  resolve(_valorRetorno) {
+    // El valor de retorno del constructor se ignora (igual que en Java/Python)
+    this.resultado = this._instancia;
+    this.resuelto  = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `new ${this.nombreClase}(...)`; }
+}
+
+// Llamada a método de instancia: obj.metodo(args)
+// Igual a LlamadaFuncion pero activa la memoriaInstancia del objeto como tercer nivel.
+export class LlamadaMetodo extends Instruccion {
+  constructor(objetoExpr, nombreMetodo, argsExprs) {
+    super();
+    this.objetoExpr   = objetoExpr;
+    this.nombreMetodo = nombreMetodo;
+    this.argsExprs    = argsExprs;
+    this.argIdx       = 0;
+    this.enEjecucion  = false;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.objetoExpr.reiniciar();
+    this.argIdx      = 0;
+    this.enEjecucion = false;
+    this.argsExprs.forEach(a => a.reiniciar());
+  }
+
+  resolver(hilo) {
+    // Fase 1: evaluar el objeto receptor
+    if (!this.objetoExpr.estaResuelto()) {
+      this.objetoExpr.resolver(hilo);
+      return;
+    }
+
+    // Fase 2: evaluar argumentos de a uno
+    while (this.argIdx < this.argsExprs.length) {
+      const arg = this.argsExprs[this.argIdx];
+      if (!arg.estaResuelto()) {
+        arg.resolver(hilo);
+        return;
+      }
+      this.argIdx++;
+    }
+
+    // Fase 3: primer vez que todo está listo — dispatch según tipo del objeto
+    if (!this.enEjecucion) {
+      this.enEjecucion = true;
+      const obj = this.objetoExpr.resolverPuro();
+      const valoresArgs = this.argsExprs.map(a => a.resolverPuro());
+
+      if (obj instanceof InstanciaMonitor) {
+        // Método de monitor — lookup en la tabla de monitores del hilo
+        const monitor = hilo.monitores[obj.nombreMonitor];
+        if (!monitor || !monitor.tieneMetodo(this.nombreMetodo)) {
+          throw ErrorSimulador.runtime(
+            `El monitor "${obj.nombreMonitor}" no tiene el método "${this.nombreMetodo}"`
+          );
+        }
+        const def = monitor.getMetodo(this.nombreMetodo);
+        hilo.informar("LlamadaM", `${obj}.${this.nombreMetodo}(${valoresArgs.join(", ")})`);
+        hilo.llamarMetodoMonitor(this.nombreMetodo, def.params, def.instrucciones, valoresArgs, obj, this);
+        return;
+      }
+
+      if (obj instanceof Instancia) {
+        // Lookup en la tabla de clases del hilo (instrucciones frescas por hilo)
+        const clase = hilo.clases[obj.nombreClase];
+        if (!clase || !clase.tieneMetodo(this.nombreMetodo)) {
+          throw ErrorSimulador.runtime(
+            `La clase "${obj.nombreClase}" no tiene el método "${this.nombreMetodo}"`
+          );
+        }
+        const def = clase.getMetodo(this.nombreMetodo);
+        hilo.informar("LlamadaM", `${obj}.${this.nombreMetodo}(${valoresArgs.join(", ")})`);
+        hilo.llamarMetodo(this.nombreMetodo, def.params, def.instrucciones, valoresArgs, obj, this);
+        return;
+      }
+
+      // Fallback: método built-in (ej: lista.length(), lista.sum(), etc.)
+      const fn = AccesoMetodo.METODOS[this.nombreMetodo];
+      if (!fn) throw ErrorSimulador.runtime(`Método desconocido: "${this.nombreMetodo}"`);
+      this.resultado = fn(obj, ...valoresArgs);
+      hilo.informar("Método", `${this.nombreMetodo}(${obj}) = ${this.resultado}`);
+      this.resuelto = true;
+      return;
+    }
+
+    // Fase 4: el frame de método de instancia ya terminó (resolve() fue llamado)
+  }
+
+  resolve(valorRetorno) {
+    this.resultado = valorRetorno;
+    this.resuelto  = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.objetoExpr}.${this.nombreMetodo}(...)`; }
+}
+
 // --- Semáforos ---
 
 // Instrucción s.acquire(): bloquea el hilo si no hay permisos disponibles.
@@ -893,6 +1081,171 @@ export class Release extends Instruccion {
   }
 
   toString() { return `${this.semExpr}.release()`; }
+}
+
+// ─── Monitor ──────────────────────────────────────────────────────────────────
+
+// Intenta tomar el lock del monitor al entrar a un método.
+// Si el lock está libre → lo toma y sigue. Si está ocupado → bloquea el thread.
+// No se marca resuelta hasta que el thread efectivamente tiene el lock.
+export class EntradaMonitor extends Instruccion {
+  constructor(instanciaExpr) {
+    super();
+    this.instanciaExpr = instanciaExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.instanciaExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.instanciaExpr.estaResuelto()) {
+      this.instanciaExpr.resolver(hilo);
+      return;
+    }
+    const inst = this.instanciaExpr.resolverPuro();
+    if (!(inst instanceof InstanciaMonitor)) {
+      throw ErrorSimulador.runtime(`Se esperaba un monitor`);
+    }
+    // intentarTomarLock devuelve true si tomó el lock, false si quedó bloqueado
+    const ok = inst.intentarTomarLock(hilo, this);
+    if (ok) this.resuelto = true;
+    // Si no ok, el thread quedó bloqueado — esta instrucción NO se marca resuelta.
+    // Cuando el monitor libere el lock y despierte este thread, llamará a resolverComoDesbloqueado()
+  }
+
+  resolverComoDesbloqueado() { this.resuelto = true; }
+  toString() { return `[EntradaMonitor]`; }
+}
+
+// Libera el lock del monitor al salir del método.
+export class SalidaMonitor extends Instruccion {
+  constructor(instanciaMonitor) {
+    super();
+    this.instanciaMonitor = instanciaMonitor; // referencia directa a InstanciaMonitor
+  }
+
+  resolver(hilo) {
+    this.instanciaMonitor.liberarLock(hilo);
+    this.resuelto = true;
+  }
+
+  toString() { return `[SalidaMonitor]`; }
+}
+
+// wait() — suelta el lock y encola el thread en la variable de condición.
+export class Wait extends Instruccion {
+  constructor(condicionExpr) {
+    super();
+    this.condicionExpr = condicionExpr; // expresión que resuelve a VariableCondicion
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.condicionExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.condicionExpr.estaResuelto()) {
+      this.condicionExpr.resolver(hilo);
+      return;
+    }
+    const vc            = this.condicionExpr.resolverPuro();
+    const instMonitor   = hilo.getMonitorActivo();
+    hilo.informar("Wait", `esperando en condición`);
+    // Soltar el lock antes de encolar
+    instMonitor.lock = null;
+    // Despertar a un thread que esperaba el lock (si hay)
+    if (instMonitor.colaLock.length > 0) {
+      instMonitor.colaLock.sort(() => Math.random() - 0.5);
+      const { hilo: sig, instruccion } = instMonitor.colaLock.shift();
+      instMonitor.lock = sig;
+      sig.despertarEnMonitor(instruccion);
+      sig.informar("MonitorEntra", `${instMonitor.nombreMonitor} — lock tomado`);
+    }
+    // Encolar este thread en la variable de condición (queda bloqueado)
+    vc.encolar(hilo, this);
+    // NO marcar resuelta — el thread está bloqueado.
+    // resolverComoDesbloqueado() se llama cuando notify() lo despierta.
+  }
+
+  resolverComoDesbloqueado() { this.resuelto = true; }
+  toString() { return `wait()`; }
+}
+
+// notify() — despierta al primero de la cola de la variable de condición.
+export class Notify extends Instruccion {
+  constructor(condicionExpr) {
+    super();
+    this.condicionExpr = condicionExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.condicionExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.condicionExpr.estaResuelto()) {
+      this.condicionExpr.resolver(hilo);
+      return;
+    }
+    const vc          = this.condicionExpr.resolverPuro();
+    const instMonitor = hilo.getMonitorActivo();
+    hilo.informar("Notify", `notificando condición`);
+    vc.notificarUno(instMonitor);
+    this.resuelto = true;
+  }
+
+  toString() { return `notify()`; }
+}
+
+// notifyAll() — despierta a todos los threads de la variable de condición.
+export class NotifyAll extends Instruccion {
+  constructor(condicionExpr) {
+    super();
+    this.condicionExpr = condicionExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.condicionExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.condicionExpr.estaResuelto()) {
+      this.condicionExpr.resolver(hilo);
+      return;
+    }
+    const vc          = this.condicionExpr.resolverPuro();
+    const instMonitor = hilo.getMonitorActivo();
+    hilo.informar("NotifyAll", `notificando todos`);
+    vc.notificarTodos(instMonitor);
+    this.resuelto = true;
+  }
+
+  toString() { return `notifyAll()`; }
+}
+
+// Expresión que resuelve a una VariableCondicion del monitor activo.
+// Para wait()/notify() implícitos usa la condición "_default".
+// Para explícitos: condicion.wait() → LecturaCondicion("condicion")
+export class LecturaCondicion extends Instruccion {
+  constructor(nombre) {
+    super();
+    this.nombre = nombre; // "_default" o nombre explícito
+  }
+
+  resolver(hilo) {
+    const inst = hilo.getMonitorActivo();
+    if (!inst) throw ErrorSimulador.runtime(`wait/notify usado fuera de un monitor`);
+    this.resultado = inst.getCondicion(this.nombre);
+    this.resuelto  = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return this.nombre === "_default" ? `(condición)` : this.nombre; }
 }
 
 export class Maximo extends Instruccion {

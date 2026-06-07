@@ -11,6 +11,7 @@ export class ListaCircular{
         this.indice = (this.indice + 1) % this.lista.length
     }
     reiniciarTodos(){
+        this.indice = 0;
         this.lista.forEach(element => element.reiniciar());
     }
 }

@@ -29,9 +29,12 @@ export const TK = Object.freeze({
   LOCAL:  "LOCAL",
 
   // Keywords OOP
-  CLASS: "CLASS",
-  NEW:   "NEW",
-  THIS:  "THIS",
+  CLASS:       "CLASS",
+  NEW:         "NEW",
+  THIS:        "THIS",
+  CONSTRUCTOR: "CONSTRUCTOR",
+  MONITOR:     "MONITOR",
+  CONDITION:   "CONDITION",
 
   // Keywords Thread / Function
   THREAD:   "THREAD",
@@ -95,9 +98,12 @@ const KEYWORDS = {
   "return":  TK.RETURN,
   "global":  TK.GLOBAL,
   "local":   TK.LOCAL,
-  "class":   TK.CLASS,
-  "new":     TK.NEW,
-  "this":    TK.THIS,
+  "class":       TK.CLASS,
+  "new":         TK.NEW,
+  "this":        TK.THIS,
+  "constructor": TK.CONSTRUCTOR,
+  "monitor":     TK.MONITOR,
+  "condition":   TK.CONDITION,
   "Thread":   TK.THREAD,
   "function": TK.FUNCTION,
   "true":    TK.BOOL,
