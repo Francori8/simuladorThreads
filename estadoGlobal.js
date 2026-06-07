@@ -12,10 +12,9 @@ export default class EstadoGlobal {
     return this.finalizacion.estado();
   }
   mostrarTraza() {
-    console.log(this.estados);
     return this.estados.map(
       (value) => `<div class="elementoTraza">
-                    <h3 class="thread">TH : ${value.threadId()} </h3>
+                    <h3 class="thread">${value.threadLabel()} </h3>
                     <div class="contenedorTraza">
                         <p class="texto">${value.getInstruccion() ?? ""}</p>
                         <p class="operacion">${value.estiloDeOperacion()}</p>

@@ -21,7 +21,7 @@ Thread(2){
 ```
 
 - `Thread(N)` crea N instancias del mismo bloque
-- `Thread(N, 'nombre')` crea N instancias con nombre
+- `Thread(N, 'nombre')` crea N instancias con nombre — la traza muestra `TH N : Nombre`
 - `global Tipo nombre = valor` declara una variable compartida entre todos los threads
 - `local Tipo nombre = valor` declara una variable local al thread
 - Tipos disponibles: `Int`, `String`, `Bool`, `List`, `Semaphore`
@@ -74,11 +74,7 @@ global Semaphore[] sems = new Semaphore[5](1, true)  // array de 5 semáforos fu
 
 ---
 
-## Lo que falta implementar
-
-### Clases
-
-#### Sintaxis planificada
+## Clases
 
 ```
 class Contador {
@@ -105,6 +101,15 @@ Thread(2){
 }
 ```
 
+- `class NombreClase { ... }` define una clase con atributos, constructor y métodos
+- `local Tipo nombre = valor` dentro de la clase declara un atributo con valor inicial
+- `constructor(params) { ... }` se ejecuta al crear la instancia — puede recibir parámetros
+- `function nombre(params) { ... }` dentro de la clase define un método
+- `global NombreClase c = new NombreClase(args)` crea una instancia global compartida entre todos los threads
+- `local NombreClase c = new NombreClase(args)` crea una instancia local al thread — no se comparte
+- `c.metodo(args)` llama a un método sobre una instancia — el interleaving puede ocurrir entre instrucciones del método
+- `this.metodo(args)` dentro de un método llama a otro método de la misma instancia
+
 #### Modelo de memoria
 
 Cuando un método accede a una variable, el orden de búsqueda es:
@@ -112,73 +117,101 @@ Cuando un método accede a una variable, el orden de búsqueda es:
 2. Atributos de la instancia
 3. Variables globales
 
-Los atributos pertenecen a la **instancia**, no a la clase. Si dos threads tienen referencia a la misma instancia, ven los mismos atributos (posible race condition). Si cada thread crea su propia instancia con `local`, no se comparte nada.
+Los atributos pertenecen a la **instancia**, no a la clase. Si dos threads referencian la misma instancia global, ven los mismos atributos — posible race condition. Si cada thread crea su propia instancia con `local`, no hay memoria compartida.
 
-#### Plan de implementación
+#### Arquitectura de clases
 
-**Lexer:**
-- `class` → ya existe (`TK.CLASS`)
-- `constructor` → nueva keyword `TK.CONSTRUCTOR`
-- `this` → ya existe (`TK.THIS`)
-
-**Parser:**
-- `parseClass()` — parsea atributos, constructor y métodos. Guarda en tabla de clases compartida (similar a `funciones`).
-- `parseGlobalDecl()` / `parseLocal()` — detectar `new NombreClase(args)` para crear instancias.
-- `AccesoMetodo` ya maneja `obj.metodo(args)` — se extiende para llamadas a métodos de instancia.
-
-**Nueva clase `Instancia` (archivo propio `instancia.js`):**
-```js
-class Instancia {
-    constructor(nombreClase, memoriaInstancia, metodos)
-    // memoriaInstancia → objeto Memoria con los atributos de la instancia
-    // metodos → tabla nombre -> { params, instrucciones }
-}
-```
-
-**Nueva instrucción `LlamadaMetodo` en `instrucciones.js`:**
-- Similar a `LlamadaFuncion` pero al entrar al método activa un tercer nivel de memoria (la instancia).
-- El hilo necesita saber cuál es la instancia activa para resolver lecturas/escrituras de atributos.
-
-**`hilos.js`:**
-- Agregar `memoriaInstancia` al frame del call stack cuando se llama un método.
-- `leer(nombre)`: busca en local → instancia activa → global.
-- `escribir(nombre, valor)`: escribe en el primer nivel donde existe la variable.
+- `clase.js` — `Clase` (definición: atributos default, métodos, constructor) e `Instancia` (memoria propia de atributos + referencia al nombre de clase)
+- Cada hilo re-parsea sus propias instrucciones de métodos para evitar estado compartido entre hilos (`resuelto`, `resultado`)
+- El lookup de métodos va: `hilo.clases[instancia.nombreClase].getMetodo(nombre)` — así cada hilo usa sus propias instrucciones frescas pero la instancia (y sus atributos) es compartida correctamente
 
 ---
 
-### Monitores
+## Monitores
 
-*(Pendiente de definición — el usuario explicará cómo funcionan los monitores de la materia antes de implementar.)*
-
-La idea base es que un monitor es como una clase pero con exclusión mutua implícita: cuando un thread entra a cualquier método del monitor, los demás threads que intenten entrar quedan bloqueados hasta que el primero termine.
-
-Sintaxis planificada:
 ```
 monitor Buffer {
-    local Int dato = 0
+    condition hayDato
+    condition hayEspacio
 
-    constructor() {
-    }
+    local Int dato = 0
+    local Bool lleno = false
 
     function depositar(Int v) {
+        while (lleno == true) {
+            hayEspacio.wait()
+        }
         dato = v
+        lleno = true
+        hayDato.notify()
     }
 
     function retirar() {
-        return dato
+        while (lleno == false) {
+            hayDato.wait()
+        }
+        local Int tmp = dato
+        lleno = false
+        hayEspacio.notify()
+        return tmp
     }
+}
+
+global Buffer b = new Buffer()
+
+Thread(1, 'Productor'){
+    b.depositar(42)
+}
+
+Thread(1, 'Consumidor'){
+    print(b.retirar())
 }
 ```
 
+- `monitor NombreMonitor { ... }` define un monitor — como una clase pero con exclusión mutua implícita
+- Solo un thread puede ejecutar un método del monitor a la vez; los demás quedan bloqueados hasta que el primero termine
+- `local Tipo nombre = valor` dentro del monitor declara un atributo
+- `constructor(params) { ... }` opcional, se ejecuta al instanciar
+- `function nombre(params) { ... }` define un método con exclusión mutua automática
+- `global NombreMonitor m = new NombreMonitor()` crea una instancia global del monitor
+
+#### Variables de condición
+
+Los monitores soportan variables de condición para sincronización más precisa:
+
+```
+condition nombreCondicion
+```
+
+- `wait()` — el thread libera el lock del monitor y se bloquea en la variable de condición default
+- `notify()` — despierta al primero en esperar en la condición (FIFO)
+- `notifyAll()` — despierta a todos los que esperan en la condición
+- `condicion.wait()` — bloquea en una variable de condición explícita
+- `condicion.notify()` — notifica la primera en esa condición
+- `condicion.notifyAll()` — notifica todas en esa condición
+
+**Semántica:**
+- Las colas de variables de condición son **FIFO**
+- La pelea por el lock al despertar es **aleatoria** (no FIFO)
+- El monitor es **re-entrante**: si un método llama a otro método del mismo monitor, el lock no se suelta — se mantiene hasta que el método más externo termine
+- Se recomienda usar `while` en lugar de `if` para re-verificar la condición al despertar (patrón estándar de monitores)
+
+#### Arquitectura de monitores
+
+- `monitor.js` — `Monitor` (definición), `InstanciaMonitor` (lock + profundidad de re-entrada + cola de espera), `VariableCondicion` (cola FIFO)
+- `EntradaMonitor` — instrucción inyectada al inicio de cada método; toma el lock o bloquea
+- El lock se libera en `retornarFuncion()` al detectar que el frame pertenece a un monitor, manejando correctamente tanto métodos con `return` explícito como los que terminan por agotamiento del bloque
+- La re-entrada se maneja con un contador de profundidad: `liberarLock` solo suelta el lock cuando la profundidad llega a 0
+
+**Pendiente:** agregar más ejemplos de monitores (lectores-escritores, filósofos, barrera, etc.)
+
 ---
 
-### Metaprogramación (post-concurrencia)
+## Lo que sigue
 
-Hoy `AccesoMetodo` tiene una tabla estática de métodos disponibles (`maximum`, `minimum`, `length`, `sum`). Agregar un nuevo método a un objeto requiere modificar el lexer, parser y esa tabla.
+### Mensajes / Canales
 
-**Objetivo:** que `AccesoMetodo` delegue directamente al objeto JS si tiene ese método, sin hardcodear nada. Así agregar `permisos()` a `Semaphore` solo requiere escribir el método en `semaforo.js`.
-
-Los únicos casos especiales que siempre necesitan tratamiento en el parser son `acquire`/`release` porque son métodos **bloqueantes** — generan instrucciones propias (`Acquire`/`Release`) en lugar de `AccesoMetodo`.
+El próximo mecanismo de sincronización a implementar. La idea es modelar comunicación entre threads mediante paso de mensajes o canales bloqueantes, al estilo CSP o Go channels.
 
 ---
 
@@ -191,11 +224,13 @@ Los únicos casos especiales que siempre necesitan tratamiento en el parser son 
 | `script.js` | Orquesta UI y ejecución |
 | `lexer.js` | Tokeniza el pseudocódigo |
 | `parser.js` | Convierte tokens en instrucciones ejecutables |
-| `instrucciones.js` | Clases de instrucciones (assign, if, while, semáforos, etc.) |
+| `instrucciones.js` | Clases de instrucciones (assign, if, while, semáforos, monitores, etc.) |
 | `hilos.js` | Lógica de ejecución de cada thread |
 | `estadoGlobal.js` | Scheduler y traza |
 | `memoria.js` | Manejo de variables |
 | `semaforo.js` | Clase Semaphore con acquire/release |
-| `listaCircular.js` | Estructura para ciclos |
+| `clase.js` | Clases `Clase` e `Instancia` para el modelo de objetos |
+| `monitor.js` | Clases `Monitor`, `InstanciaMonitor` y `VariableCondicion` |
+| `listaCircular.js` | Estructura para ciclos con interleaving |
 | `ejemplo.js` | Ejemplos precargados por categoría |
 | `errores.js` | Clase ErrorSimulador para errores de parse y runtime |

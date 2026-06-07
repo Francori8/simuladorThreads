@@ -1,14 +1,16 @@
-import { Ciclo, CicloRepeat, CicloForEach, While } from "./instrucciones.js";
+import { Ciclo, CicloRepeat, CicloForEach, While, EntradaMonitor } from "./instrucciones.js";
 import Memoria from "./memoria.js";
 import { Semaphore } from "./semaforo.js";
 import { ErrorSimulador } from "./errores.js";
+import { Instancia } from "./clase.js";
+import { InstanciaMonitor } from "./monitor.js";
 
 function esSemaforo(valor) {
   return valor instanceof Semaphore || Array.isArray(valor) && valor[0] instanceof Semaphore;
 }
 
 export default class Hilo {
-  constructor(id, cache, memoriaCompartida, bloque, funciones = {}, nombre = null) {
+  constructor(id, cache, memoriaCompartida, bloque, funciones = {}, nombre = null, clases = {}, monitores = {}) {
     this.id = id;
     this.nombre = nombre ?? `Thread-${id}`;
     this.memoriaLocal = cache;
@@ -21,6 +23,8 @@ export default class Hilo {
     this._contexto = [];
     this._callStack = []; // frames de funciones: { bloque, proximaInstruccion, memoriaLocal, llamada }
     this.funciones = funciones; // tabla nombre -> { params, instrucciones }
+    this.clases    = clases;   // tabla nombre -> Clase (instancias frescas por hilo)
+    this.monitores = monitores; // tabla nombre -> Monitor (instancias frescas por hilo)
   }
 
   setEstadoGlobal(estadoGlobal) {
@@ -68,34 +72,105 @@ export default class Hilo {
 
   // --- Interfaz para las instrucciones ---
 
+  // Devuelve la memoriaInstancia activa si estamos dentro de un método, o null.
+  _memoriaInstanciaActiva() {
+    for (let i = this._callStack.length - 1; i >= 0; i--) {
+      if (this._callStack[i].memoriaInstancia) return this._callStack[i].memoriaInstancia;
+    }
+    return null;
+  }
+
+  // Devuelve la Instancia activa (para resolver `this`), o null si no hay.
+  getInstanciaActiva() {
+    for (let i = this._callStack.length - 1; i >= 0; i--) {
+      if (this._callStack[i].instanciaActiva) return this._callStack[i].instanciaActiva;
+    }
+    return null;
+  }
+
+  // Devuelve la InstanciaMonitor activa del frame actual (para wait/notify).
+  getMonitorActivo() {
+    for (let i = this._callStack.length - 1; i >= 0; i--) {
+      if (this._callStack[i].instanciaMonitor) return this._callStack[i].instanciaMonitor;
+    }
+    return null;
+  }
+
+  // Bloquea el thread esperando el lock del monitor
+  bloquearEnMonitor(instruccionEntrada) {
+    this.preparado = false;
+    this.bloqueado = true;
+    this._pendiente = instruccionEntrada;
+    this.informar("MonitorEspera", `esperando lock`);
+  }
+
+  // Bloquea el thread en una variable de condición
+  bloquearEnCondicion(instruccionWait) {
+    this.preparado = false;
+    this.bloqueado = true;
+    this._pendiente = instruccionWait;
+    this.informar("CondEspera", `bloqueado en condición`);
+  }
+
+  // Despierta el thread (desde monitor o condición)
+  despertarEnMonitor(instruccion) {
+    this.preparado = true;
+    this.bloqueado = false;
+    instruccion.resolverComoDesbloqueado();
+    this._pendiente = null;
+  }
+
   leer(nombre) {
     let valor;
-    if (this.memoriaCompartida.hayVariable(nombre)) {
-      valor = this.memoriaCompartida.verValor(nombre);
-      if (!esSemaforo(valor)) {
-        this.memoriaLocal.agregarVariable(nombre, valor);
-      }
-    } else if (this.memoriaLocal.hayVariable(nombre)) {
+    let scope;
+    // Orden: local → instancia activa → global
+    if (this.memoriaLocal.hayVariable(nombre)) {
       valor = this.memoriaLocal.verValor(nombre);
+      scope = "local";
     } else {
-      throw ErrorSimulador.runtime(
-        `Variable "${nombre}" no está declarada`,
-        this.id,
-        this.proximaInstruccion?.toString()
-      );
+      const instMem = this._memoriaInstanciaActiva();
+      if (instMem && instMem.hayVariable(nombre)) {
+        valor = instMem.verValor(nombre);
+        if (!esSemaforo(valor)) {
+          this.informar("Lectura", `instancia.${nombre} : ${valor}`);
+        }
+        return valor;
+      } else if (this.memoriaCompartida.hayVariable(nombre)) {
+        valor = this.memoriaCompartida.verValor(nombre);
+        scope = "global";
+      } else {
+        throw ErrorSimulador.runtime(
+          `Variable "${nombre}" no está declarada`,
+          this.id,
+          this.proximaInstruccion?.toString()
+        );
+      }
     }
     if (!esSemaforo(valor)) {
-      this.informar("Lectura", `local.${nombre} : ${valor}`);
+      this.informar("Lectura", `${scope}.${nombre} : ${valor}`);
     }
     return valor;
   }
 
   escribir(nombre, valor) {
-    if (this.memoriaCompartida.hayVariable(nombre)) {
-      this.informar("Escritura", `global.${nombre} : ${valor}`);
-      this.memoriaCompartida.agregarVariable(nombre, valor);
-    } else {
+    // Orden: si existe en local → escribe en local (y en global si también existe ahí)
+    //        si existe en instancia activa → escribe en instancia
+    //        si existe en global → escribe en global
+    //        si no existe en ninguna → crea en local
+    if (this.memoriaLocal.hayVariable(nombre)) {
       this.memoriaLocal.agregarVariable(nombre, valor);
+      this.informar("Escritura", `local.${nombre} : ${valor}`);
+    } else {
+      const instMem = this._memoriaInstanciaActiva();
+      if (instMem && instMem.hayVariable(nombre)) {
+        this.informar("Escritura", `instancia.${nombre} : ${valor}`);
+        instMem.agregarVariable(nombre, valor);
+      } else if (this.memoriaCompartida.hayVariable(nombre)) {
+        this.informar("Escritura", `global.${nombre} : ${valor}`);
+        this.memoriaCompartida.agregarVariable(nombre, valor);
+      } else {
+        this.memoriaLocal.agregarVariable(nombre, valor);
+      }
     }
   }
 
@@ -105,7 +180,7 @@ export default class Hilo {
   informar(tipo, detalle) {
     const ctx = this._contexto.length > 0 ? this._contexto.at(-1) : this.proximaInstruccion;
     this.estadoGlobal.informar(
-      new Estado(this.id, tipo, detalle, ctx?.toString() || "")
+      new Estado(this.id, this.nombre, tipo, detalle, ctx?.toString() || "")
     );
   }
 
@@ -266,26 +341,81 @@ export default class Hilo {
   // --- Call stack de funciones ---
 
   llamarFuncion(nombre, params, instruccionesTemplate, valores, instruccionLlamada) {
-    // Guardar frame actual
     this._callStack.push({
       bloque:              this.bloque,
       proximaInstruccion:  this.proximaInstruccion,
       memoriaLocal:        this.memoriaLocal,
+      memoriaInstancia:    null,
       llamada:             instruccionLlamada,
     });
 
-    // Nuevo frame: memoria local propia con los parámetros inicializados
     const nuevoFrame = new Memoria();
     params.forEach((p, i) => nuevoFrame.agregarVariable(p, valores[i] ?? null));
 
-    // Copiar instrucciones (ya vienen re-parseadas por hilo, así que son instancias frescas)
+    // Reiniciar instrucciones antes de ejecutar — el mismo hilo puede llamar
+    // la función varias veces y las instrucciones quedan resuelto=true de la vez anterior
+    instruccionesTemplate.forEach(i => i.reiniciarParaLlamada ? i.reiniciarParaLlamada() : i.reiniciar());
     const cuerpo = [...instruccionesTemplate];
 
     if (cuerpo.length === 0) {
-      // Función vacía: retornar inmediatamente con null
       instruccionLlamada.resolve(null);
       return;
     }
+
+    this.bloque             = cuerpo;
+    this.proximaInstruccion = this.bloque.shift();
+    this.memoriaLocal       = nuevoFrame;
+  }
+
+  llamarMetodo(nombre, params, instruccionesTemplate, valores, instancia, instruccionLlamada) {
+    this._callStack.push({
+      bloque:              this.bloque,
+      proximaInstruccion:  this.proximaInstruccion,
+      memoriaLocal:        this.memoriaLocal,
+      memoriaInstancia:    instancia.memoriaInstancia,
+      instanciaActiva:     instancia, // para resolver `this`
+      llamada:             instruccionLlamada,
+    });
+
+    const nuevoFrame = new Memoria();
+    params.forEach((p, i) => nuevoFrame.agregarVariable(p, valores[i] ?? null));
+
+    // Reiniciar instrucciones antes de ejecutar
+    instruccionesTemplate.forEach(i => i.reiniciarParaLlamada ? i.reiniciarParaLlamada() : i.reiniciar());
+    const cuerpo = [...instruccionesTemplate];
+
+    if (cuerpo.length === 0) {
+      instruccionLlamada.resolve(null);
+      return;
+    }
+
+    this.bloque             = cuerpo;
+    this.proximaInstruccion = this.bloque.shift();
+    this.memoriaLocal       = nuevoFrame;
+  }
+
+  // Llama a un método de monitor: antepone EntradaMonitor (toma el lock).
+  // El lock se libera en retornarFuncion() al detectar frame.instanciaMonitor.
+  llamarMetodoMonitor(nombre, params, instruccionesTemplate, valores, instanciaMonitor, instruccionLlamada) {
+    this._callStack.push({
+      bloque:              this.bloque,
+      proximaInstruccion:  this.proximaInstruccion,
+      memoriaLocal:        this.memoriaLocal,
+      memoriaInstancia:    instanciaMonitor.memoriaInstancia,
+      instanciaActiva:     null,
+      instanciaMonitor:    instanciaMonitor,
+      llamada:             instruccionLlamada,
+    });
+
+    const nuevoFrame = new Memoria();
+    params.forEach((p, i) => nuevoFrame.agregarVariable(p, valores[i] ?? null));
+
+    instruccionesTemplate.forEach(i => i.reiniciarParaLlamada ? i.reiniciarParaLlamada() : i.reiniciar());
+
+    // EntradaMonitor toma el lock (o bloquea si está ocupado).
+    // El lock se libera siempre en retornarFuncion() al detectar frame.instanciaMonitor.
+    const entrada = new EntradaMonitor(new _LiteralInstancia(instanciaMonitor));
+    const cuerpo  = [entrada, ...instruccionesTemplate];
 
     this.bloque             = cuerpo;
     this.proximaInstruccion = this.bloque.shift();
@@ -299,6 +429,10 @@ export default class Hilo {
       return;
     }
     const frame = this._callStack.pop();
+    // Si era un frame de monitor, liberar el lock antes de restaurar
+    if (frame.instanciaMonitor) {
+      frame.instanciaMonitor.liberarLock(this);
+    }
     // Restaurar estado del llamador
     this.bloque             = frame.bloque;
     this.proximaInstruccion = frame.proximaInstruccion;
@@ -340,15 +474,31 @@ export default class Hilo {
   }
 }
 
+// Expresión que resuelve directamente a un valor ya conocido (sin pasar por el hilo).
+// Usada internamente para pasar la InstanciaMonitor a EntradaMonitor.
+class _LiteralInstancia {
+  constructor(valor) {
+    this.valor    = valor;
+    this.resuelto = false;
+  }
+  estaResuelto()  { return this.resuelto; }
+  reiniciar()     { this.resuelto = false; }
+  resolver(_hilo) { this.resuelto = true; }
+  resolverPuro()  { return this.valor; }
+  toString()      { return `${this.valor}`; }
+}
+
 class Estado {
-  constructor(idThread, operacion, texto, instruccion) {
+  constructor(idThread, nombreThread, operacion, texto, instruccion) {
     this.thread = idThread;
+    this.nombre = nombreThread;
     this.operacion = operacion;
     this.texto = texto;
     this.instruccion = instruccion;
   }
 
   threadId() { return this.thread; }
+  threadLabel() { return this.nombre ? `TH ${this.thread} : ${this.nombre}` : `TH : ${this.thread}`; }
   estiloDeOperacion() { return this.operacion; }
   desarrollo() { return this.texto; }
   getInstruccion() { return this.instruccion; }
