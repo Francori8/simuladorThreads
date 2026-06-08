@@ -310,9 +310,7 @@ export class Ciclo extends Instruccion {
     // Mientras evaluamos la condición, no ejecutar el bloque
     if (this._evaluandoCondicion) {
       if (!this.condicion.estaResuelto()) {
-        hilo.pushContexto(this.condicion);
         this.condicion.resolver(hilo);
-        hilo.popContexto();
       } else {
         this._evaluandoCondicion = false;
         hilo.resolverSeguirCiclo(this.condicion.resolverPuro(), this);
@@ -329,9 +327,7 @@ export class Ciclo extends Instruccion {
         // Fin de vuelta: reiniciar bloque y pasar a evaluar condición
         this.bloque.reiniciarTodos();
         this._evaluandoCondicion = true;
-        hilo.pushContexto(this.condicion);
         this.condicion.resolver(hilo);
-        hilo.popContexto();
       }
     } else {
       hilo.pushContexto(siguiente);
@@ -348,6 +344,15 @@ export class While extends Instruccion {
     super();
     this.condicion = condicion;
     this.max = max;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.condicion.reiniciar();
+  }
+
+  reiniciarParaLlamada() {
+    this.reiniciar();
   }
 
   resolver(hilo) {

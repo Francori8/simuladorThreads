@@ -445,7 +445,7 @@ export default class Hilo {
 
   borrarProximoCasoFalsoSiExiste() {
     const indice = this.indiceDelBloqueQueCierraActual(0);
-    if (this.bloque[indice].esElse()) {
+    if (this.bloque[indice] && this.bloque[indice].esElse()) {
       this.borrarHastaFinDeBloqueDesde(indice);
     }
   }
