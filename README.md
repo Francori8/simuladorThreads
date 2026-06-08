@@ -267,9 +267,33 @@ print(r.campo1)
 
 ---
 
-## Lo que sigue para v0
+## Roadmap
 
-- Más ejemplos de canales (ver pendiente arriba)
+### Antes de v0 → v1
+
+- **Threads dentro de procesos** — `Thread(N) { ... }` dentro de un `process`, con herencia de contexto (los threads ven las variables locales del proceso, incluyendo canales). La pureza del modelo de mensajes queda a cargo del programador — igual que con `global` en el resto del simulador.
+  - El patrón principal es un servidor con loop: `while(true){ req = c.receive(); Thread(1){ ...procesar req... } }` — cada iteración lanza un thread nuevo. Requiere que `Thread` sea ejecutable en cualquier punto del body, no solo al inicio (hoy `LanzarThreads` se inyecta una sola vez al principio).
+  - Ciclo de vida: los threads deberían poder crearse dinámicamente a lo largo de la ejecución y morir cuando terminan su tarea. Si el proceso padre muere, los hijos también mueren.
+- **Más ejemplos reales** — pipeline, fan-out, productor-consumidor con canales, filósofos sin memoria compartida, y otros patrones de la materia
+- **Verificación general** — asegurarse de que todo ande correctamente antes de taggear v1
+
+---
+
+### Ideas para v1+
+
+- **Mejor representación de objetos en la traza** — en vez de `[Buffer]` o `[Database]`, mostrar el estado interno del objeto (atributos y sus valores actuales) para que la traza sea más legible
+
+- **`sleep(n)`** — instrucción que pausa un thread. El `n` no representa tiempo real sino algo a definir: probablemente *instrucciones ejecutadas por otros threads* antes de que este vuelva a ser elegible, o simplemente un número de *pasos del scheduler*. Hace visible el efecto del timing sin necesidad de concurrencia real.
+
+- **Visualización de deadlock** — cuando todos los threads están bloqueados y ninguno puede avanzar, mostrarlo claramente en pantalla (ya aparece un warn en algunos casos, habría que pulirlo y hacerlo visible en la UI)
+
+- **Más ejemplos de algoritmos** — Peterson, Dekker, 5 filósofos con semáforos, sleeping barber, barbería, etc.
+
+- **Traza paso a paso** — dos modos de ejecución: el modo continuo actual (corre todo y muestra la traza al final) y un modo paso a paso donde el usuario avanza con un botón y ve la traza crecer en tiempo real. Para implementarlo hay que extraer "ejecutar un paso" como función independiente en `EstadoGlobal` y mover el control del loop a `script.js` — la lógica de scheduling no cambia, solo quién decide cuándo ejecutar el siguiente paso.
+
+- **Otras formas de visualización** — por ejemplo: diagrama de estados de los threads (corriendo / bloqueado / terminado), línea de tiempo estilo Gantt, o vista de memoria compartida en tiempo real
+
+---
 
 ---
 

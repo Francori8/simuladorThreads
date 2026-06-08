@@ -1424,3 +1424,28 @@ export class EscrituraCampo extends Instruccion {
 
   toString() { return `${this.objExpr}.${this.campo} = ${this.valorExpr}`; }
 }
+
+// Lanza threads hijos al inicio de un proceso.
+// threadDefs: [{ rawNum, nombre, instruccionesFn }]
+// instruccionesFn: función () => [...instrucciones frescas] — se llama N veces
+export class LanzarThreads extends Instruccion {
+  constructor(threadDefs) {
+    super();
+    this.threadDefs = threadDefs; // [{ rawNum, nombre, instruccionesFn }]
+  }
+
+  reiniciar() { super.reiniciar(); }
+
+  resolver(hilo) {
+    for (const def of this.threadDefs) {
+      const num = isNaN(Number(def.rawNum)) ? hilo.leer(def.rawNum) : Number(def.rawNum);
+      for (let i = 0; i < num; i++) {
+        hilo.estadoGlobal.lanzarHiloHijo(hilo, def.nombre, def.instruccionesFn());
+      }
+    }
+    hilo.informar("LanzaThreads", `${this.threadDefs.map(d => `Thread(${d.rawNum})`).join(", ")}`);
+    this.resuelto = true;
+  }
+
+  toString() { return `[LanzarThreads]`; }
+}

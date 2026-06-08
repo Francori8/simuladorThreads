@@ -18,6 +18,7 @@ import {
   Acquire, Release,
   EntradaMonitor, SalidaMonitor, Wait, Notify, NotifyAll, LecturaCondicion,
   Send, Receive, NuevoCanal, NuevoRequest, LecturaCampo, EscrituraCampo,
+  LanzarThreads,
 } from "./instrucciones.js";
 import { Canal } from "./canal.js";
 
@@ -511,7 +512,8 @@ class Parser {
   }
 
   // process Nombre(c1, c2) { ... }
-  // Crea exactamente 1 hilo con los canales pasados como variables locales
+  // Crea exactamente 1 hilo con los canales pasados como variables locales.
+  // Los Thread(N){...} dentro del proceso se detectan y se guardan como threadsInternos.
   parseProcess() {
     this.expect(TK.PROCESS);
     const nombre = this.expect(TK.IDENT).value;
@@ -523,8 +525,21 @@ class Parser {
     }
     this.expect(TK.RPAREN);
     this.expect(TK.LBRACE);
-    const instrucciones = this.parseBlock();
-    return { tipo: 'process', nombre, params, instrucciones };
+
+    // Parsear el body del proceso, separando Thread(...){} internos
+    const instrucciones = [];
+    const threadsInternos = []; // [{ rawNum, nombre, instrucciones }]
+    while (!this.check(TK.RBRACE) && !this.check(TK.EOF)) {
+      if (this.check(TK.THREAD)) {
+        threadsInternos.push(this.parseThread());
+      } else {
+        instrucciones.push(...this.parseStatement());
+      }
+    }
+    this.match(TK.RBRACE);
+    instrucciones.push(new FinDeBloque());
+
+    return { tipo: 'process', nombre, params, instrucciones, threadsInternos };
   }
 
   parseThread() {
@@ -1032,7 +1047,7 @@ export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
 
     // process Nombre(c1, c2) { ... } — 1 hilo, canales inyectados como locales
     if (threadDef.tipo === 'process') {
-      const { nombre, params } = threadDef;
+      const { nombre, params, threadsInternos } = threadDef;
       const tokensCopia   = new Lexer(textoRaw).tokenize();
       const funcionesCopia = {};
       const clasesCopia    = {};
@@ -1044,11 +1059,36 @@ export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
       for (const p of params) {
         if (mem.hayVariable(p)) memLocal.agregarVariable(p, mem.verValor(p));
       }
+
+      // Si hay threads internos, construir LanzarThreads y anteponerlo al body
+      let instruccionesFinales = threadsCopia[ti].instrucciones;
+      if (threadsInternos && threadsInternos.length > 0) {
+        // Para cada thread interno necesitamos una fábrica de instrucciones frescas
+        // Re-parseamos para obtener instrucciones del proceso copiado
+        const procesoCopia = threadsCopia[ti]; // tiene .threadsInternos con instrucciones frescas
+        const defs = (procesoCopia.threadsInternos || threadsInternos).map((td, idx) => ({
+          rawNum: td.rawNum,
+          nombre: td.nombre,
+          // instruccionesFn: función que devuelve instrucciones frescas cada vez
+          instruccionesFn: () => {
+            const tk2 = new Lexer(textoRaw).tokenize();
+            const fc2 = {}, cl2 = {}, mo2 = {};
+            const p2 = new Parser(tk2, mem, consola, limiteRepeticiones, fc2, cl2, mo2);
+            const { threads: t2 } = p2.parseProgram();
+            // El thread interno idx-ésimo del proceso ti
+            const procesoDef = t2[ti];
+            return (procesoDef.threadsInternos || [])[idx]?.instrucciones ?? [];
+          },
+        }));
+        const lanzar = new LanzarThreads(defs);
+        instruccionesFinales = [lanzar, ...instruccionesFinales];
+      }
+
       hilos.push(new Hilo(
         idThread++,
         memLocal,
         mem,
-        threadsCopia[ti].instrucciones,
+        instruccionesFinales,
         funcionesCopia,
         nombre ?? null,
         clasesCopia,
