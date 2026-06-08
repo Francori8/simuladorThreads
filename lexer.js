@@ -14,6 +14,8 @@ export const TK = Object.freeze({
   TYPE_STRING:    "TYPE_STRING",
   TYPE_LIST:      "TYPE_LIST",
   TYPE_SEMAPHORE: "TYPE_SEMAPHORE",
+  TYPE_CHANNEL:   "TYPE_CHANNEL",
+  PROCESS:        "PROCESS",
 
   // Keywords de control
   IF:      "IF",
@@ -87,6 +89,9 @@ const KEYWORDS = {
   "String":    TK.TYPE_STRING,
   "List":      TK.TYPE_LIST,
   "Semaphore": TK.TYPE_SEMAPHORE,
+  "Channel":   TK.TYPE_CHANNEL,
+  "process":   TK.PROCESS,
+  "Request":   TK.IDENT, // se maneja como IDENT, el parser lo detecta por nombre
   "acquire":   TK.IDENT,
   "release":   TK.IDENT,
   "if":      TK.IF,

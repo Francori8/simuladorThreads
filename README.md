@@ -207,11 +207,69 @@ condition nombreCondicion
 
 ---
 
-## Lo que sigue
+## Canales
 
-### Mensajes / Canales
+```
+global Channel c = new Channel()
 
-El próximo mecanismo de sincronización a implementar. La idea es modelar comunicación entre threads mediante paso de mensajes o canales bloqueantes, al estilo CSP o Go channels.
+process Emisor(c) {
+    c.send(42)
+}
+
+process Receptor(c) {
+    local x = c.receive()
+    print(x)
+}
+```
+
+- `global Channel c = new Channel()` declara un canal global
+- `local Channel c = new Channel()` declara un canal local
+- `c.send(valor)` — **no bloqueante**: encola el valor en el buffer del canal. Si hay un receiver esperando, hace hand-off directo
+- `c.receive()` — **bloqueante**: consume el primer valor del buffer. Si el buffer está vacío, bloquea el thread hasta que alguien haga `send`
+- `process Nombre(c1, c2) { ... }` crea exactamente 1 thread con los canales como variables locales — semánticamente equivale a un proceso que se comunica solo por mensajes
+- Los canales pueden pasarse como parámetros a funciones o enviarse por otro canal
+
+#### Modelo del buffer
+
+El buffer del canal es suficientemente grande para los ejemplos de la materia — no hay límite artificial. No se puede hacer `while(true) { c.send(...) }` porque llenaría la memoria.
+
+La semántica es FIFO: los mensajes se reciben en el orden en que fueron enviados.
+
+#### Request
+
+Para agrupar varios datos en un mensaje:
+
+```
+local req = new Request()
+req.campo1 = valor1
+req.campo2 = valor2
+c.send(req)
+
+local r = c.receive()
+print(r.campo1)
+```
+
+- `new Request()` crea un objeto con campos dinámicos
+- `r.campo = valor` asigna un campo
+- `r.campo` lee un campo
+
+#### Arquitectura de canales
+
+- `canal.js` — `Canal` (buffer FIFO + cola de receivers bloqueados) y `Request` (mapa de campos dinámicos)
+- `send` hace hand-off directo si hay receivers en espera; si no, encola en el buffer
+- `receive` consume del buffer si hay dato; si no, bloquea el thread via `bloquearEnCanal()`
+- El despertar sigue el mismo patrón que semáforos y monitores: `despertarDelCanal()` llama `resolverComoDesbloqueado(valor)` sobre la instrucción `Receive` pendiente
+
+#### Pendiente
+
+- Más ejemplos: pipeline, fan-out, productor-consumidor con canales, filósofos sin memoria compartida
+- Threads dentro de procesos (sintaxis: `Thread(N) { ... }` adentro de un `process`)
+
+---
+
+## Lo que sigue para v0
+
+- Más ejemplos de canales (ver pendiente arriba)
 
 ---
 
@@ -224,13 +282,14 @@ El próximo mecanismo de sincronización a implementar. La idea es modelar comun
 | `script.js` | Orquesta UI y ejecución |
 | `lexer.js` | Tokeniza el pseudocódigo |
 | `parser.js` | Convierte tokens en instrucciones ejecutables |
-| `instrucciones.js` | Clases de instrucciones (assign, if, while, semáforos, monitores, etc.) |
+| `instrucciones.js` | Clases de instrucciones (assign, if, while, semáforos, monitores, canales, etc.) |
 | `hilos.js` | Lógica de ejecución de cada thread |
 | `estadoGlobal.js` | Scheduler y traza |
 | `memoria.js` | Manejo de variables |
 | `semaforo.js` | Clase Semaphore con acquire/release |
 | `clase.js` | Clases `Clase` e `Instancia` para el modelo de objetos |
 | `monitor.js` | Clases `Monitor`, `InstanciaMonitor` y `VariableCondicion` |
+| `canal.js` | Clases `Canal` y `Request` para comunicación por mensajes |
 | `listaCircular.js` | Estructura para ciclos con interleaving |
 | `ejemplo.js` | Ejemplos precargados por categoría |
 | `errores.js` | Clase ErrorSimulador para errores de parse y runtime |

@@ -104,6 +104,23 @@ export default class Hilo {
     this.informar("MonitorEspera", `esperando lock`);
   }
 
+  // Bloquea el thread esperando en receive() de un canal
+  bloquearEnCanal(instruccionReceive) {
+    this.preparado = false;
+    this.bloqueado = true;
+    this._pendiente = instruccionReceive;
+    this.informar("CanalEspera", `bloqueado esperando receive`);
+  }
+
+  // Despierta desde receive(), pasando el valor recibido
+  despertarDelCanal(instruccionReceive, valor) {
+    this.preparado = true;
+    this.bloqueado = false;
+    instruccionReceive.resolverComoDesbloqueado(valor);
+    this._pendiente = null;
+    this.informar("CanalReceive", `recibido: ${valor}`);
+  }
+
   // Bloquea el thread en una variable de condición
   bloquearEnCondicion(instruccionWait) {
     this.preparado = false;
