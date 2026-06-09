@@ -71,4 +71,13 @@ export default class EstadoGlobal {
   threadPreparados() {
     return this.threads.filter((th) => th.estaPreparado());
   }
+
+  // Crea un hilo hijo heredando el contexto del proceso padre.
+  // El hijo ve las variables locales del padre (incluyendo canales) como propias.
+  lanzarHiloHijo(padre, nombre, instrucciones) {
+    const id = this.threads.length;
+    const hijo = padre._crearHijoConContexto(id, nombre, instrucciones);
+    this.threads.push(hijo);
+    hijo.setEstadoGlobal(this);
+  }
 }

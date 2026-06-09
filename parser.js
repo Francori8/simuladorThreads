@@ -17,7 +17,10 @@ import {
   LlamadaFuncion, LlamadaMetodo, NuevaInstancia, LecturaThis, Return,
   Acquire, Release,
   EntradaMonitor, SalidaMonitor, Wait, Notify, NotifyAll, LecturaCondicion,
+  Send, Receive, NuevoCanal, NuevoRequest, LecturaCampo, EscrituraCampo,
+  LanzarThreads,
 } from "./instrucciones.js";
+import { Canal } from "./canal.js";
 
 // ─── Nombres legibles para tokens ────────────────────────────────────────────
 
@@ -111,7 +114,7 @@ class Parser {
   isType(type) {
     return type === TK.TYPE_INT || type === TK.TYPE_BOOL ||
            type === TK.TYPE_STRING || type === TK.TYPE_LIST ||
-           type === TK.TYPE_SEMAPHORE;
+           type === TK.TYPE_SEMAPHORE || type === TK.TYPE_CHANNEL;
   }
 
   isSemaphoreType() {
@@ -136,6 +139,8 @@ class Parser {
         this.parseClass();
       } else if (this.check(TK.MONITOR)) {
         this.parseMonitor();
+      } else if (this.check(TK.PROCESS)) {
+        threads.push(this.parseProcess());
       } else {
         this.advance();
       }
@@ -286,6 +291,18 @@ class Parser {
 
   parseGlobalDecl() {
     const typeTok = this.advance(); // consume type keyword
+
+    // global Channel c = new Channel()
+    if (typeTok.type === TK.TYPE_CHANNEL) {
+      const name = this.expect(TK.IDENT).value;
+      this.expect(TK.ASSIGN);
+      this.expect(TK.NEW);
+      this.expect(TK.TYPE_CHANNEL);
+      this.expect(TK.LPAREN);
+      this.expect(TK.RPAREN);
+      this.match(TK.SEMICOLON);
+      return { name, value: new Canal() };
+    }
 
     // global Semaphore s = new Semaphore(n, bool?)
     // global Semaphore[] sems = new Semaphore[k](n, bool?)
@@ -494,6 +511,37 @@ class Parser {
     this.funciones[nombre] = { params, instrucciones };
   }
 
+  // process Nombre(c1, c2) { ... }
+  // Crea exactamente 1 hilo con los canales pasados como variables locales.
+  // Los Thread(N){...} dentro del proceso se detectan y se guardan como threadsInternos.
+  parseProcess() {
+    this.expect(TK.PROCESS);
+    const nombre = this.expect(TK.IDENT).value;
+    this.expect(TK.LPAREN);
+    const params = [];
+    while (!this.check(TK.RPAREN) && !this.check(TK.EOF)) {
+      params.push(this.expect(TK.IDENT).value);
+      this.match(TK.COMMA);
+    }
+    this.expect(TK.RPAREN);
+    this.expect(TK.LBRACE);
+
+    // Parsear el body del proceso, separando Thread(...){} internos
+    const instrucciones = [];
+    const threadsInternos = []; // [{ rawNum, nombre, instrucciones }]
+    while (!this.check(TK.RBRACE) && !this.check(TK.EOF)) {
+      if (this.check(TK.THREAD)) {
+        threadsInternos.push(this.parseThread());
+      } else {
+        instrucciones.push(...this.parseStatement());
+      }
+    }
+    this.match(TK.RBRACE);
+    instrucciones.push(new FinDeBloque());
+
+    return { tipo: 'process', nombre, params, instrucciones, threadsInternos };
+  }
+
   parseThread() {
     this.expect(TK.THREAD);
     this.expect(TK.LPAREN);
@@ -549,6 +597,19 @@ class Parser {
 
   parseLocal() {
     this.expect(TK.LOCAL);
+
+    // local Channel c = new Channel()
+    if (this.check(TK.TYPE_CHANNEL)) {
+      this.advance();
+      const name = this.expect(TK.IDENT).value;
+      this.expect(TK.ASSIGN);
+      this.expect(TK.NEW);
+      this.expect(TK.TYPE_CHANNEL);
+      this.expect(TK.LPAREN);
+      this.expect(TK.RPAREN);
+      this.match(TK.SEMICOLON);
+      return [new InicializarLocal(name, new NuevoCanal())];
+    }
 
     // Detectar si el tipo es un nombre de clase: local NombreClase c = new NombreClase(args)
     if (this.check(TK.IDENT) && this.clases[this.peek().value]) {
@@ -708,6 +769,15 @@ class Parser {
           return new EscrituraIndexada(name, idx, this.parseExpr());
         }
         this.pos = saved;
+      // name.campo = expr  (escritura de campo de Request)
+      } else if (this.check(TK.DOT)) {
+        this.advance();
+        const campo = this.expect(TK.IDENT).value;
+        if (this.check(TK.ASSIGN)) {
+          this.advance();
+          return new EscrituraCampo(new Lectura(name), campo, this.parseExpr());
+        }
+        this.pos = saved;
       // name = expr  (solo = simple, no ==)
       } else if (this.check(TK.ASSIGN)) {
         this.advance();
@@ -801,6 +871,11 @@ class Parser {
           expr = new Acquire(expr);
         } else if (method === 'release') {
           expr = new Release(expr);
+        } else if (method === 'send') {
+          const arg = args.length > 0 ? args[0] : new Literal(null);
+          expr = new Send(expr, arg);
+        } else if (method === 'receive') {
+          expr = new Receive(expr);
         } else if (method === 'wait') {
           // condicion.wait() o this.wait() — la expr es la condición o el monitor
           expr = new Wait(new LecturaCondicion('_default'));
@@ -850,6 +925,27 @@ class Parser {
     if (tok.type === TK.THIS) {
       this.advance();
       return new LecturaThis();
+    }
+
+    // new Request()
+    if (tok.type === TK.NEW) {
+      this.advance();
+      const typeTok = this.peek();
+      if (typeTok.type === TK.IDENT && typeTok.value === 'Request') {
+        this.advance();
+        this.expect(TK.LPAREN);
+        this.expect(TK.RPAREN);
+        return new NuevoRequest();
+      }
+      // new Channel() como expresión (para local Channel c = new Channel() ya manejado,
+      // pero por si acaso se usa en otro contexto)
+      if (typeTok.type === TK.TYPE_CHANNEL) {
+        this.advance();
+        this.expect(TK.LPAREN);
+        this.expect(TK.RPAREN);
+        return new NuevoCanal();
+      }
+      throw ErrorSimulador.parse(`Se esperaba Request o Channel después de 'new'`, typeTok.line);
     }
 
     if (tok.type === TK.LBRACKET) {
@@ -947,7 +1043,62 @@ export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
   const hilos = [];
 
   for (let ti = 0; ti < threads.length; ti++) {
-    const { rawNum, nombre } = threads[ti];
+    const threadDef = threads[ti];
+
+    // process Nombre(c1, c2) { ... } — 1 hilo, canales inyectados como locales
+    if (threadDef.tipo === 'process') {
+      const { nombre, params, threadsInternos } = threadDef;
+      const tokensCopia   = new Lexer(textoRaw).tokenize();
+      const funcionesCopia = {};
+      const clasesCopia    = {};
+      const monitoresCopia = {};
+      const parserCopia    = new Parser(tokensCopia, mem, consola, limiteRepeticiones, funcionesCopia, clasesCopia, monitoresCopia);
+      const { threads: threadsCopia } = parserCopia.parseProgram();
+      const memLocal = new Memoria();
+      // Inyectar cada canal como variable local con el mismo nombre
+      for (const p of params) {
+        if (mem.hayVariable(p)) memLocal.agregarVariable(p, mem.verValor(p));
+      }
+
+      // Si hay threads internos, construir LanzarThreads y anteponerlo al body
+      let instruccionesFinales = threadsCopia[ti].instrucciones;
+      if (threadsInternos && threadsInternos.length > 0) {
+        // Para cada thread interno necesitamos una fábrica de instrucciones frescas
+        // Re-parseamos para obtener instrucciones del proceso copiado
+        const procesoCopia = threadsCopia[ti]; // tiene .threadsInternos con instrucciones frescas
+        const defs = (procesoCopia.threadsInternos || threadsInternos).map((td, idx) => ({
+          rawNum: td.rawNum,
+          nombre: td.nombre,
+          // instruccionesFn: función que devuelve instrucciones frescas cada vez
+          instruccionesFn: () => {
+            const tk2 = new Lexer(textoRaw).tokenize();
+            const fc2 = {}, cl2 = {}, mo2 = {};
+            const p2 = new Parser(tk2, mem, consola, limiteRepeticiones, fc2, cl2, mo2);
+            const { threads: t2 } = p2.parseProgram();
+            // El thread interno idx-ésimo del proceso ti
+            const procesoDef = t2[ti];
+            return (procesoDef.threadsInternos || [])[idx]?.instrucciones ?? [];
+          },
+        }));
+        const lanzar = new LanzarThreads(defs);
+        instruccionesFinales = [lanzar, ...instruccionesFinales];
+      }
+
+      hilos.push(new Hilo(
+        idThread++,
+        memLocal,
+        mem,
+        instruccionesFinales,
+        funcionesCopia,
+        nombre ?? null,
+        clasesCopia,
+        monitoresCopia,
+      ));
+      continue;
+    }
+
+    // Thread(N) o Thread(N, 'nombre') — N hilos
+    const { rawNum, nombre } = threadDef;
     const num = (typeof rawNum === 'number' || !isNaN(Number(rawNum)))
       ? Number(rawNum)
       : mem.verValor(rawNum);

@@ -27,6 +27,27 @@ export default class Hilo {
     this.monitores = monitores; // tabla nombre -> Monitor (instancias frescas por hilo)
   }
 
+  // Crea un hilo hijo que hereda el contexto del proceso padre:
+  // - memoriaLocal del padre como memoriaCompartida del hijo (herencia de contexto)
+  // - memoriaCompartida global sigue siendo la misma
+  // - funciones, clases y monitores se comparten por referencia
+  _crearHijoConContexto(id, nombre, instrucciones) {
+    const hijo = new Hilo(
+      id,
+      new Memoria(), // memoria local fresca para el hijo
+      this.memoriaCompartida,
+      instrucciones,
+      this.funciones,
+      nombre ?? null,
+      this.clases,
+      this.monitores,
+    );
+    // El hijo puede leer variables del proceso padre como si fueran globales
+    // a través de un tercer nivel de memoria: memoriaLocal del padre
+    hijo._memoriaContextoPadre = this.memoriaLocal;
+    return hijo;
+  }
+
   setEstadoGlobal(estadoGlobal) {
     this.estadoGlobal = estadoGlobal;
   }
@@ -104,6 +125,23 @@ export default class Hilo {
     this.informar("MonitorEspera", `esperando lock`);
   }
 
+  // Bloquea el thread esperando en receive() de un canal
+  bloquearEnCanal(instruccionReceive) {
+    this.preparado = false;
+    this.bloqueado = true;
+    this._pendiente = instruccionReceive;
+    this.informar("CanalEspera", `bloqueado esperando receive`);
+  }
+
+  // Despierta desde receive(), pasando el valor recibido
+  despertarDelCanal(instruccionReceive, valor) {
+    this.preparado = true;
+    this.bloqueado = false;
+    instruccionReceive.resolverComoDesbloqueado(valor);
+    this._pendiente = null;
+    this.informar("CanalReceive", `recibido: ${valor}`);
+  }
+
   // Bloquea el thread en una variable de condición
   bloquearEnCondicion(instruccionWait) {
     this.preparado = false;
@@ -123,7 +161,7 @@ export default class Hilo {
   leer(nombre) {
     let valor;
     let scope;
-    // Orden: local → instancia activa → global
+    // Orden: local → instancia activa → contexto padre (si es hilo hijo) → global
     if (this.memoriaLocal.hayVariable(nombre)) {
       valor = this.memoriaLocal.verValor(nombre);
       scope = "local";
@@ -135,6 +173,9 @@ export default class Hilo {
           this.informar("Lectura", `instancia.${nombre} : ${valor}`);
         }
         return valor;
+      } else if (this._memoriaContextoPadre && this._memoriaContextoPadre.hayVariable(nombre)) {
+        valor = this._memoriaContextoPadre.verValor(nombre);
+        scope = "proceso";
       } else if (this.memoriaCompartida.hayVariable(nombre)) {
         valor = this.memoriaCompartida.verValor(nombre);
         scope = "global";
@@ -153,10 +194,7 @@ export default class Hilo {
   }
 
   escribir(nombre, valor) {
-    // Orden: si existe en local → escribe en local (y en global si también existe ahí)
-    //        si existe en instancia activa → escribe en instancia
-    //        si existe en global → escribe en global
-    //        si no existe en ninguna → crea en local
+    // Orden: local → instancia activa → contexto padre (si es hilo hijo) → global → crea en local
     if (this.memoriaLocal.hayVariable(nombre)) {
       this.memoriaLocal.agregarVariable(nombre, valor);
       this.informar("Escritura", `local.${nombre} : ${valor}`);
@@ -165,6 +203,9 @@ export default class Hilo {
       if (instMem && instMem.hayVariable(nombre)) {
         this.informar("Escritura", `instancia.${nombre} : ${valor}`);
         instMem.agregarVariable(nombre, valor);
+      } else if (this._memoriaContextoPadre && this._memoriaContextoPadre.hayVariable(nombre)) {
+        this._memoriaContextoPadre.agregarVariable(nombre, valor);
+        this.informar("Escritura", `proceso.${nombre} : ${valor}`);
       } else if (this.memoriaCompartida.hayVariable(nombre)) {
         this.informar("Escritura", `global.${nombre} : ${valor}`);
         this.memoriaCompartida.agregarVariable(nombre, valor);
@@ -445,7 +486,7 @@ export default class Hilo {
 
   borrarProximoCasoFalsoSiExiste() {
     const indice = this.indiceDelBloqueQueCierraActual(0);
-    if (this.bloque[indice].esElse()) {
+    if (this.bloque[indice] && this.bloque[indice].esElse()) {
       this.borrarHastaFinDeBloqueDesde(indice);
     }
   }

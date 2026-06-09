@@ -2,6 +2,7 @@ import { ListaCircular } from "./listaCircular.js";
 import { ErrorSimulador } from "./errores.js";
 import { Instancia } from "./clase.js";
 import { InstanciaMonitor } from "./monitor.js";
+import { Canal, Request } from "./canal.js";
 
 class Instruccion {
   constructor() {
@@ -310,9 +311,7 @@ export class Ciclo extends Instruccion {
     // Mientras evaluamos la condición, no ejecutar el bloque
     if (this._evaluandoCondicion) {
       if (!this.condicion.estaResuelto()) {
-        hilo.pushContexto(this.condicion);
         this.condicion.resolver(hilo);
-        hilo.popContexto();
       } else {
         this._evaluandoCondicion = false;
         hilo.resolverSeguirCiclo(this.condicion.resolverPuro(), this);
@@ -329,9 +328,7 @@ export class Ciclo extends Instruccion {
         // Fin de vuelta: reiniciar bloque y pasar a evaluar condición
         this.bloque.reiniciarTodos();
         this._evaluandoCondicion = true;
-        hilo.pushContexto(this.condicion);
         this.condicion.resolver(hilo);
-        hilo.popContexto();
       }
     } else {
       hilo.pushContexto(siguiente);
@@ -348,6 +345,15 @@ export class While extends Instruccion {
     super();
     this.condicion = condicion;
     this.max = max;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.condicion.reiniciar();
+  }
+
+  reiniciarParaLlamada() {
+    this.reiniciar();
   }
 
   resolver(hilo) {
@@ -764,6 +770,13 @@ export class AccesoMetodo extends Instruccion {
     }
     const obj  = this.objetoExpr.resolverPuro();
     const args = this.argsExprs.map(a => a.resolverPuro());
+    // Acceso a campo de Request
+    if (obj instanceof Request) {
+      this.resultado = obj.getCampo(this.metodo);
+      hilo.informar("Lectura", `${this.objetoExpr}.${this.metodo} : ${this.resultado}`);
+      this.resuelto = true;
+      return;
+    }
     const fn   = AccesoMetodo.METODOS[this.metodo];
     if (!fn) throw ErrorSimulador.runtime(`Método desconocido: "${this.metodo}"`);
     this.resultado = fn(obj, ...args);
@@ -1272,4 +1285,167 @@ export class Maximo extends Instruccion {
 
   resolverPuro() { return this.resultado; }
   toString() { return `maximum(${this.arregloExpr})`; }
+}
+
+// ─── Canales ──────────────────────────────────────────────────────────────────
+
+// new Channel() — crea un canal nuevo (en expresión, para local/global)
+export class NuevoCanal extends Instruccion {
+  constructor() { super(); }
+  reiniciar() { super.reiniciar(); }
+  resolver(hilo) {
+    this.resultado = new Canal();
+    this.resuelto  = true;
+  }
+  resolverPuro() { return this.resultado; }
+  toString() { return `new Channel()`; }
+}
+
+// c.send(valor) — no bloqueante
+export class Send extends Instruccion {
+  constructor(canalExpr, valorExpr) {
+    super();
+    this.canalExpr = canalExpr;
+    this.valorExpr = valorExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.canalExpr.reiniciar();
+    this.valorExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.canalExpr.estaResuelto()) { this.canalExpr.resolver(hilo); return; }
+    if (!this.valorExpr.estaResuelto()) { this.valorExpr.resolver(hilo); return; }
+    const canal = this.canalExpr.resolverPuro();
+    const valor = this.valorExpr.resolverPuro();
+    canal.send(valor, hilo);
+    this.resuelto = true;
+  }
+
+  toString() { return `${this.canalExpr}.send(...)`; }
+}
+
+// c.receive() — bloqueante, usable como expresión
+export class Receive extends Instruccion {
+  constructor(canalExpr) {
+    super();
+    this.canalExpr = canalExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.canalExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.canalExpr.estaResuelto()) { this.canalExpr.resolver(hilo); return; }
+    const canal = this.canalExpr.resolverPuro();
+    const resultado = canal.receive(hilo, this);
+    if (resultado !== null) {
+      // Dato disponible inmediatamente
+      this.resultado = resultado.valor;
+      this.resuelto  = true;
+    }
+    // Si null: hilo bloqueado, resolverComoDesbloqueado() lo completará
+  }
+
+  resolverComoDesbloqueado(valor) {
+    this.resultado = valor;
+    this.resuelto  = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `receive(...)`; }
+}
+
+// new Request() — crea un objeto de datos dinámico
+export class NuevoRequest extends Instruccion {
+  constructor() { super(); }
+  reiniciar() { super.reiniciar(); }
+  resolver(hilo) {
+    this.resultado = new Request();
+    this.resuelto  = true;
+  }
+  resolverPuro() { return this.resultado; }
+  toString() { return `new Request()`; }
+}
+
+// r.campo — lectura de campo de un Request
+export class LecturaCampo extends Instruccion {
+  constructor(objExpr, campo) {
+    super();
+    this.objExpr = objExpr;
+    this.campo   = campo;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.objExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.objExpr.estaResuelto()) { this.objExpr.resolver(hilo); return; }
+    const obj = this.objExpr.resolverPuro();
+    this.resultado = obj.getCampo(this.campo);
+    hilo.informar("Lectura", `${this.objExpr}.${this.campo} : ${this.resultado}`);
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `${this.objExpr}.${this.campo}`; }
+}
+
+// r.campo = expr — escritura de campo de un Request
+export class EscrituraCampo extends Instruccion {
+  constructor(objExpr, campo, valorExpr) {
+    super();
+    this.objExpr   = objExpr;
+    this.campo     = campo;
+    this.valorExpr = valorExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.objExpr.reiniciar();
+    this.valorExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.objExpr.estaResuelto())   { this.objExpr.resolver(hilo);   return; }
+    if (!this.valorExpr.estaResuelto()) { this.valorExpr.resolver(hilo); return; }
+    const obj   = this.objExpr.resolverPuro();
+    const valor = this.valorExpr.resolverPuro();
+    obj.setCampo(this.campo, valor);
+    hilo.informar("Escritura", `${this.objExpr}.${this.campo} = ${valor}`);
+    this.resuelto = true;
+  }
+
+  toString() { return `${this.objExpr}.${this.campo} = ${this.valorExpr}`; }
+}
+
+// Lanza threads hijos al inicio de un proceso.
+// threadDefs: [{ rawNum, nombre, instruccionesFn }]
+// instruccionesFn: función () => [...instrucciones frescas] — se llama N veces
+export class LanzarThreads extends Instruccion {
+  constructor(threadDefs) {
+    super();
+    this.threadDefs = threadDefs; // [{ rawNum, nombre, instruccionesFn }]
+  }
+
+  reiniciar() { super.reiniciar(); }
+
+  resolver(hilo) {
+    for (const def of this.threadDefs) {
+      const num = isNaN(Number(def.rawNum)) ? hilo.leer(def.rawNum) : Number(def.rawNum);
+      for (let i = 0; i < num; i++) {
+        hilo.estadoGlobal.lanzarHiloHijo(hilo, def.nombre, def.instruccionesFn());
+      }
+    }
+    hilo.informar("LanzaThreads", `${this.threadDefs.map(d => `Thread(${d.rawNum})`).join(", ")}`);
+    this.resuelto = true;
+  }
+
+  toString() { return `[LanzarThreads]`; }
 }
