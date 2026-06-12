@@ -31,7 +31,16 @@ export default class Memoria{
         return this.contenido.map(value => value.mostrarVariable())
     }
 
-
+    // Devuelve una copia con los valores actuales de cada variable.
+    // Los valores de referencia (canales, semáforos, instancias) se comparten —
+    // igual que las variables globales: el hijo ve el mismo objeto, pero tiene su propio slot.
+    clonar() {
+        const copia = new Memoria();
+        for (const v of this.contenido) {
+            copia.contenido.push(new Variable(v.nombre, v.valor));
+        }
+        return copia;
+    }
 }
 
 

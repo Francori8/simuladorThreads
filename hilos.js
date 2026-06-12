@@ -19,6 +19,7 @@ export default class Hilo {
     this.proximaInstruccion = bloque.shift();
     this.preparado = true;
     this.bloqueado = false;
+    this._pasosSleep = 0;
     this.estadoGlobal = null;
     this._contexto = [];
     this._callStack = []; // frames de funciones: { bloque, proximaInstruccion, memoriaLocal, llamada }
@@ -42,9 +43,10 @@ export default class Hilo {
       this.clases,
       this.monitores,
     );
-    // El hijo puede leer variables del proceso padre como si fueran globales
-    // a través de un tercer nivel de memoria: memoriaLocal del padre
-    hijo._memoriaContextoPadre = this.memoriaLocal;
+    // El hijo recibe un snapshot de la memoria local del padre en el momento de ser lanzado.
+    // Así cada hijo tiene sus propios valores aunque el padre sobreescriba variables después.
+    // Los valores de referencia (canales, instancias) se comparten por referencia — correcto.
+    hijo._memoriaContextoPadre = this.memoriaLocal.clonar();
     return hijo;
   }
 
@@ -52,8 +54,24 @@ export default class Hilo {
     this.estadoGlobal = estadoGlobal;
   }
 
-  estaPreparado()  { return this.preparado; }
-  estaBloqueado()  { return this.bloqueado; }
+  estaPreparado()   { return this.preparado; }
+  estaBloqueado()   { return this.bloqueado; }
+  estaDurmiendo()   { return this._pasosSleep > 0; }
+
+  dormir(n) {
+    this.preparado = false;
+    this.bloqueado = false;
+    this._pasosSleep = n;
+  }
+
+  tickSleep() {
+    if (this._pasosSleep <= 0) return;
+    this._pasosSleep--;
+    if (this._pasosSleep === 0) {
+      this.preparado = true;
+      this.informar("Despertado", "sleep terminado");
+    }
+  }
 
   bloquear(instruccionAcquire) {
     this.preparado = false;
@@ -88,7 +106,7 @@ export default class Hilo {
         this.proximaInstruccion = this.bloque.shift();
       }
     }
-    this.estadoGlobal.decidirQuienSigue(this);
+    this.estadoGlobal.decidirQuienSigue();
   }
 
   // --- Interfaz para las instrucciones ---

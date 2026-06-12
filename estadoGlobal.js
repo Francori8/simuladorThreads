@@ -1,3 +1,5 @@
+import { ErrorSimulador } from "./errores.js";
+
 export default class EstadoGlobal {
   constructor(threads) {
     this.probabilidad = 0;
@@ -7,9 +9,6 @@ export default class EstadoGlobal {
 
   informar(estado) {
     this.estados.push(estado);
-  }
-  mostrarEstadoDeFinalizacion() {
-    return this.finalizacion.estado();
   }
   mostrarTraza() {
     return this.estados.map(
@@ -25,34 +24,43 @@ export default class EstadoGlobal {
   }
 
   informarEstadoFinalizacionPorMaximoCiclos() {
-    console.log("Maximo ciclos alcanzado");
+    this.finalizacion = "limite";
   }
 
   informarEstadoFinalizacionExitosa() {
-    console.log("Finalizacion Exitosa");
+    this.finalizacion = "exitosa";
   }
 
   setProbabilidad(probabilidad) {
     this.probabilidad = probabilidad;
   }
 
-  decidirQuienSigue(thread) {
+  decidirQuienSigue() {
     this.sortearSuerte();
     const preparados = this.threadPreparados();
-    if (preparados.length === 0) {
-      const bloqueados = this.threads.filter(th => th.estaBloqueado());
-      if (bloqueados.length > 0) {
+    if (preparados.length > 0) {
+      preparados[0].ejecutarSiguienteInstruccion(this);
+    } else {
+      // Tick de sleep hasta que alguno despierte o no quede nadie durmiendo
+      while (this.threadPreparados().length === 0 && this.threadsDurmiendo().length > 0) {
+        this.threadsDurmiendo().forEach(th => th.tickSleep());
+      }
+      if (this.threadPreparados().length > 0) {
+        this.decidirQuienSigue();
+      } else if (this.threadsBloqueados().length > 0) {
         this.informarDeadlock();
       } else {
         this.informarEstadoFinalizacionExitosa();
       }
-    } else {
-      preparados[0].ejecutarSiguienteInstruccion(this);
     }
   }
 
   informarDeadlock() {
-    console.warn("DEADLOCK: todos los threads están bloqueados esperando un semáforo.");
+    const bloqueados = this.threads
+      .filter(th => th.estaBloqueado())
+      .map(th => `TH ${th.getId()} : ${th.nombre}`)
+      .join(", ");
+    throw ErrorSimulador.runtime(`Deadlock: todos los threads están bloqueados y ninguno puede avanzar.\nThreads bloqueados: ${bloqueados}`);
   }
 
   sortearSuerte() {
@@ -60,16 +68,20 @@ export default class EstadoGlobal {
   }
 
   resolver() {
-    this.sortearSuerte();
-    this.threads.forEach((thread) => thread.setEstadoGlobal(this));
-
-    const preparados = this.threadPreparados();
-    if (preparados.length === 0) return;
-    preparados[0].ejecutarSiguienteInstruccion(this);
+    this.threads.forEach(th => th.setEstadoGlobal(this));
+    this.decidirQuienSigue();
   }
 
   threadPreparados() {
-    return this.threads.filter((th) => th.estaPreparado());
+    return this.threads.filter(th => th.estaPreparado());
+  }
+
+  threadsDurmiendo() {
+    return this.threads.filter(th => th.estaDurmiendo());
+  }
+
+  threadsBloqueados() {
+    return this.threads.filter(th => th.estaBloqueado());
   }
 
   // Crea un hilo hijo heredando el contexto del proceso padre.

@@ -46,10 +46,11 @@ export const TK = Object.freeze({
   IDENT: "IDENT",
 
   // Operadores aritméticos
-  PLUS:  "PLUS",
-  MINUS: "MINUS",
-  STAR:  "STAR",
-  SLASH: "SLASH",
+  PLUS:    "PLUS",
+  MINUS:   "MINUS",
+  STAR:    "STAR",
+  SLASH:   "SLASH",
+  PERCENT: "PERCENT",
 
   // Operadores de comparación
   EQ:  "EQ",   // ==
@@ -222,10 +223,11 @@ export class Lexer {
 
       // Operadores y delimitadores
       switch (ch) {
-        case "+": this.emit(TK.PLUS,  ch); break;
-        case "-": this.emit(TK.MINUS, ch); break;
-        case "*": this.emit(TK.STAR,  ch); break;
-        case "/": this.emit(TK.SLASH, ch); break;
+        case "+": this.emit(TK.PLUS,    ch); break;
+        case "-": this.emit(TK.MINUS,   ch); break;
+        case "*": this.emit(TK.STAR,    ch); break;
+        case "/": this.emit(TK.SLASH,   ch); break;
+        case "%": this.emit(TK.PERCENT, ch); break;
 
         case "=": this.emit(this.match("=") ? TK.EQ     : TK.ASSIGN, ch); break;
         case "!": this.emit(this.match("=") ? TK.NEQ    : TK.NOT,    ch); break;
