@@ -9,23 +9,14 @@
   <body>
     <header>
       <div class="header-bar">
-        <h1>Simulador de Threads</h1>
-        <div class="header-probabilidad">
-          <span class="config-label">Probabilidad de cambio</span>
+        <div class="header-izq">
+          <button id="btn-toggle-ejemplos" class="btn-toggle-ejemplos" aria-expanded="true" title="Mostrar/ocultar ejemplos">☰</button>
+          <h1>Simulador de Threads</h1>
+        </div>
+        <div class="header-controles">
+          <span class="config-label">Probabilidad</span>
           <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0" />
-        </div>
-        <button id="btn-config" class="btn-config" aria-expanded="false">
-          ⚙ Configuración
-        </button>
-      </div>
-
-      <div id="panel-config" class="panel-config" hidden>
-        <div class="config-seccion">
-          <span class="config-label">Ejemplos</span>
-          <div id="contenedorBotones"></div>
-        </div>
-        <div class="config-seccion config-seccion--small">
-          <span class="config-label">Límite de ciclos</span>
+          <span class="config-label">Límite</span>
           <div class="limite-ciclos-opciones">
             <input type="radio" name="limite" id="limite-5" value="5" />
             <label for="limite-5">5</label>
@@ -41,6 +32,10 @@
     </header>
 
     <main>
+      <aside id="panel-ejemplos">
+        <div id="contenedorBotones"></div>
+      </aside>
+
       <section id="contenedorDeTexto">
         <textarea name="codigo" id="codigo">global Int n = 0
 
@@ -58,21 +53,22 @@ Thread(2){
       </section>
 
       <section id="visual">
-        <div id="panel-salida">
-          <div class="seccionEscrita">
-            <h2 class="subtitulo">Variables globales</h2>
-            <p id="variables"></p>
-          </div>
-          <div class="seccionEscrita">
-            <h2 class="subtitulo">Consola</h2>
-            <div id="consola"></div>
-          </div>
-        </div>
         <div id="panel-traza">
-          <div class="seccionEscrita">
-            <h2 class="subtitulo">Traza de Ejecución</h2>
-            <div id="traza"></div>
+          <div id="panel-salida">
+            <div class="seccionEscrita">
+              <h2 class="subtitulo">Variables globales</h2>
+              <p id="variables"></p>
+            </div>
+            <div class="seccionEscrita">
+              <h2 class="subtitulo">Consola</h2>
+              <div id="consola"></div>
+            </div>
           </div>
+          <div class="subtitulo-fila">
+            <h2 class="subtitulo">Traza de Ejecución</h2>
+            <button id="btn-copiar-traza" hidden>Copiar</button>
+          </div>
+          <div id="traza"></div>
         </div>
       </section>
     </main>

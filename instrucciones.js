@@ -85,6 +85,12 @@ export class Dividir extends OperacionAritmetica {
   toString() { return `(${this.izq} / ${this.der})`; }
 }
 
+export class Modulo extends OperacionAritmetica {
+  operar(a, b) { return a % b; }
+  get simbolo() { return "%"; }
+  toString() { return `(${this.izq} % ${this.der})`; }
+}
+
 // --- Lógicas / comparaciones ---
 
 export class Igualdad extends OperacionLogica {
@@ -1448,4 +1454,30 @@ export class LanzarThreads extends Instruccion {
   }
 
   toString() { return `[LanzarThreads]`; }
+}
+
+// sleep(n) — pausa el thread n pasos del scheduler
+export class Sleep extends Instruccion {
+  constructor(nExpr) {
+    super();
+    this.nExpr = nExpr;
+  }
+
+  reiniciar() {
+    super.reiniciar();
+    this.nExpr.reiniciar();
+  }
+
+  resolver(hilo) {
+    if (!this.nExpr.estaResuelto()) {
+      this.nExpr.resolver(hilo);
+    } else {
+      const n = this.nExpr.resolverPuro();
+      hilo.informar("Sleep", `durmiendo ${n} paso${n !== 1 ? "s" : ""}`);
+      hilo.dormir(n);
+      this.resuelto = true;
+    }
+  }
+
+  toString() { return `sleep(${this.nExpr})`; }
 }

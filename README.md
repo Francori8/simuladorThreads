@@ -43,6 +43,7 @@ Thread(2){
 - `for(local Int i = 0; i < n; i = i + 1) { ... }`
 - `for(x : lista) { ... }` — for-each
 - `print(expresion)`
+- `sleep(n)` — pausa el thread `n` pasos del scheduler; otros threads siguen ejecutando
 
 ## Funciones
 
@@ -122,7 +123,7 @@ Los atributos pertenecen a la **instancia**, no a la clase. Si dos threads refer
 #### Arquitectura de clases
 
 - `clase.js` — `Clase` (definición: atributos default, métodos, constructor) e `Instancia` (memoria propia de atributos + referencia al nombre de clase)
-- Cada hilo re-parsea sus propias instrucciones de métodos para evitar estado compartido entre hilos (`resuelto`, `resultado`)
+- Cada hilo re-parsea sus propias instrucciones de métodos para evitar estado compartido entre hilos (`resueldo`, `resultado`)
 - El lookup de métodos va: `hilo.clases[instancia.nombreClase].getMetodo(nombre)` — así cada hilo usa sus propias instrucciones frescas pero la instancia (y sus atributos) es compartida correctamente
 
 ---
@@ -203,8 +204,6 @@ condition nombreCondicion
 - El lock se libera en `retornarFuncion()` al detectar que el frame pertenece a un monitor, manejando correctamente tanto métodos con `return` explícito como los que terminan por agotamiento del bloque
 - La re-entrada se maneja con un contador de profundidad: `liberarLock` solo suelta el lock cuando la profundidad llega a 0
 
-**Pendiente:** agregar más ejemplos de monitores (lectores-escritores, filósofos, barrera, etc.)
-
 ---
 
 ## Canales
@@ -229,9 +228,28 @@ process Receptor(c) {
 - `process Nombre(c1, c2) { ... }` crea exactamente 1 thread con los canales como variables locales — semánticamente equivale a un proceso que se comunica solo por mensajes
 - Los canales pueden pasarse como parámetros a funciones o enviarse por otro canal
 
+#### Threads dinámicos dentro de procesos
+
+```
+process Servidor(c) {
+    repeat(3) {
+        local req = c.receive()
+        Thread(1, 'Worker') {
+            print(req + 1)
+        }
+    }
+}
+```
+
+- `Thread(N) { ... }` puede aparecer en cualquier punto del flujo — dentro de `while`, `if`, `repeat`, etc.
+- Se ejecuta en runtime: cada vez que el flujo llega a esa instrucción, lanza N hilos hijos
+- Los hijos reciben un **snapshot** de la memoria local del padre al momento de ser lanzados — si el padre después modifica `req`, los hijos no lo ven
+- Los hijos pueden leer variables del padre como si fueran propias (via `_memoriaContextoPadre`)
+- Los hijos mueren cuando terminan su bloque; el padre sigue ejecutando independientemente
+
 #### Modelo del buffer
 
-El buffer del canal es suficientemente grande para los ejemplos de la materia — no hay límite artificial. No se puede hacer `while(true) { c.send(...) }` porque llenaría la memoria.
+El buffer del canal es suficientemente grande para los ejemplos de la materia — no hay límite artificial.
 
 La semántica es FIFO: los mensajes se reciben en el orden en que fueron enviados.
 
@@ -260,40 +278,34 @@ print(r.campo1)
 - `receive` consume del buffer si hay dato; si no, bloquea el thread via `bloquearEnCanal()`
 - El despertar sigue el mismo patrón que semáforos y monitores: `despertarDelCanal()` llama `resolverComoDesbloqueado(valor)` sobre la instrucción `Receive` pendiente
 
-#### Pendiente
+---
 
-- Más ejemplos: pipeline, fan-out, productor-consumidor con canales, filósofos sin memoria compartida
-- Threads dentro de procesos (sintaxis: `Thread(N) { ... }` adentro de un `process`)
+## Deadlock
+
+Cuando todos los threads están bloqueados y ninguno puede avanzar, el simulador lo detecta automáticamente y lo muestra en el panel de error con la lista de threads bloqueados.
+
+Ejemplos de deadlock están en la categoría **Errores**:
+- Deadlock clásico con semáforos: T1 toma A y espera B, T2 toma B y espera A
+- Deadlock en monitor: consumidores esperan en una condición que nadie notifica
 
 ---
 
 ## Roadmap
 
-### Antes de v0 → v1
+### Para v1
 
-- **Threads dentro de procesos** — `Thread(N) { ... }` dentro de un `process`, con herencia de contexto (los threads ven las variables locales del proceso, incluyendo canales). La pureza del modelo de mensajes queda a cargo del programador — igual que con `global` en el resto del simulador.
-  - El patrón principal es un servidor con loop: `while(true){ req = c.receive(); Thread(1){ ...procesar req... } }` — cada iteración lanza un thread nuevo. Requiere que `Thread` sea ejecutable en cualquier punto del body, no solo al inicio (hoy `LanzarThreads` se inyecta una sola vez al principio).
-  - Ciclo de vida: los threads deberían poder crearse dinámicamente a lo largo de la ejecución y morir cuando terminan su tarea. Si el proceso padre muere, los hijos también mueren.
-- **Más ejemplos reales** — pipeline, fan-out, productor-consumidor con canales, filósofos sin memoria compartida, y otros patrones de la materia
-- **Verificación general** — asegurarse de que todo ande correctamente antes de taggear v1
-
----
+- **Verificación general** — correr todos los ejemplos y asegurarse que todo ande antes de taggear v1
+- **Más ejemplos** — filósofos, sleeping barber, Dekker, pipeline, fan-out
 
 ### Ideas para v1+
 
-- **Mejor representación de objetos en la traza** — en vez de `[Buffer]` o `[Database]`, mostrar el estado interno del objeto (atributos y sus valores actuales) para que la traza sea más legible
+- **Mejor representación de objetos en la traza** — en vez de `[Buffer]`, mostrar el estado interno del objeto (atributos y sus valores actuales)
 
-- **`sleep(n)`** — instrucción que pausa un thread. El `n` no representa tiempo real sino algo a definir: probablemente *instrucciones ejecutadas por otros threads* antes de que este vuelva a ser elegible, o simplemente un número de *pasos del scheduler*. Hace visible el efecto del timing sin necesidad de concurrencia real.
+- **Traza paso a paso** — modo donde el usuario avanza con un botón y ve la traza crecer en tiempo real. Requiere extraer "ejecutar un paso" como método en `Simulador` y mover el control del loop a `script.js` — la arquitectura actual ya está preparada para esto (`Simulador` es independiente de la UI)
 
-- **Visualización de deadlock** — cuando todos los threads están bloqueados y ninguno puede avanzar, mostrarlo claramente en pantalla (ya aparece un warn en algunos casos, habría que pulirlo y hacerlo visible en la UI)
+- **Otras formas de visualización** — diagrama de estados de threads (corriendo / bloqueado / durmiendo / terminado), línea de tiempo estilo Gantt, vista de memoria compartida en tiempo real
 
-- **Más ejemplos de algoritmos** — Peterson, Dekker, 5 filósofos con semáforos, sleeping barber, barbería, etc.
-
-- **Traza paso a paso** — dos modos de ejecución: el modo continuo actual (corre todo y muestra la traza al final) y un modo paso a paso donde el usuario avanza con un botón y ve la traza crecer en tiempo real. Para implementarlo hay que extraer "ejecutar un paso" como función independiente en `EstadoGlobal` y mover el control del loop a `script.js` — la lógica de scheduling no cambia, solo quién decide cuándo ejecutar el siguiente paso.
-
-- **Otras formas de visualización** — por ejemplo: diagrama de estados de los threads (corriendo / bloqueado / terminado), línea de tiempo estilo Gantt, o vista de memoria compartida en tiempo real
-
----
+- **Muerte de hijos al morir el padre** — si un proceso padre termina, los threads hijos que lanzó dinámicamente también deberían terminar
 
 ---
 
@@ -303,13 +315,14 @@ print(r.campo1)
 |---|---|
 | `index.html` | UI: editor, controles, paneles de salida |
 | `style.css` | Estilos |
-| `script.js` | Orquesta UI y ejecución |
+| `script.js` | Punto de entrada: inicializa UI y conecta eventos |
+| `simulador.js` | Orquesta ejecución: parseo, estado global, expone `iniciar()` y `trazaTexto()` |
 | `lexer.js` | Tokeniza el pseudocódigo |
 | `parser.js` | Convierte tokens en instrucciones ejecutables |
-| `instrucciones.js` | Clases de instrucciones (assign, if, while, semáforos, monitores, canales, etc.) |
+| `instrucciones.js` | Clases de instrucciones (assign, if, while, semáforos, monitores, canales, sleep, etc.) |
 | `hilos.js` | Lógica de ejecución de cada thread |
-| `estadoGlobal.js` | Scheduler y traza |
-| `memoria.js` | Manejo de variables |
+| `estadoGlobal.js` | Scheduler y traza — detecta deadlock, maneja sleep y threads dinámicos |
+| `memoria.js` | Manejo de variables, con soporte de clonado para snapshots |
 | `semaforo.js` | Clase Semaphore con acquire/release |
 | `clase.js` | Clases `Clase` e `Instancia` para el modelo de objetos |
 | `monitor.js` | Clases `Monitor`, `InstanciaMonitor` y `VariableCondicion` |

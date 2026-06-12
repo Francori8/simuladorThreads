@@ -1,7 +1,5 @@
-import Memoria from "./memoria.js";
-import EstadoGlobal from "./estadoGlobal.js";
+import Simulador from "./simulador.js";
 import ejemplos from "./ejemplo.js";
-import { parsear } from "./parser.js";
 import { ErrorSimulador } from "./errores.js";
 
 const $ = (arg) => document.querySelector(arg);
@@ -25,21 +23,16 @@ function agregarTab(e) {
 function cargar() {
   crearBotones($("#contenedorBotones"), ejemplos, modificarTexto);
   $("#ejecutar").addEventListener("click", ejecutarCodigo);
-
-  const btnConfig  = $("#btn-config");
-  const panelConfig = $("#panel-config");
-  btnConfig.addEventListener("click", () => {
-    const abierto = !panelConfig.hidden;
-    panelConfig.hidden = abierto;
-    btnConfig.setAttribute("aria-expanded", String(!abierto));
+  $("#btn-copiar-traza").addEventListener("click", () => {
+    navigator.clipboard.writeText(simulador.trazaTexto());
   });
 
-  // Cerrar al hacer click fuera del panel
-  document.addEventListener("click", (e) => {
-    if (!panelConfig.hidden && !panelConfig.contains(e.target) && e.target !== btnConfig) {
-      panelConfig.hidden = true;
-      btnConfig.setAttribute("aria-expanded", "false");
-    }
+  const btnToggle = $("#btn-toggle-ejemplos");
+  const panelEjemplos = $("#panel-ejemplos");
+  btnToggle.addEventListener("click", () => {
+    const abierto = !panelEjemplos.hidden;
+    panelEjemplos.hidden = abierto;
+    btnToggle.setAttribute("aria-expanded", String(!abierto));
   });
 }
 
@@ -49,81 +42,86 @@ function modificarTexto(e) {
     const ej = cat.ejemplos.find(ex => ex.id == idBtn);
     if (ej) {
       $("#codigo").value = ej.texto;
-      $("#panel-config").hidden = true;
-      $("#btn-config").setAttribute("aria-expanded", "false");
       return;
     }
   }
 }
 
+const simulador = new Simulador();
+
 function ejecutarCodigo() {
   ocultarError();
-  const mem = new Memoria();
   const consola = $("#consola");
   consola.innerText = "";
   $("#traza").innerHTML = "";
   $("#variables").innerText = "";
+  $("#btn-copiar-traza").hidden = true;
 
-  let threads;
   try {
-    threads = parsear(
+    simulador.iniciar(
       $("#codigo").value,
-      mem,
       consola,
-      limiteDeRepeticionesActual()
+      limiteDeRepeticionesActual(),
+      averiguarProbabilidad()
     );
   } catch (e) {
     mostrarError(e);
+    $("#traza").innerHTML = simulador.traza().join("");
     return;
   }
 
-  const estado = new EstadoGlobal(threads, mem);
-  estado.setProbabilidad(averiguarProbabilidad());
+  $("#variables").innerText = simulador.variables().join(" ");
+  $("#traza").innerHTML = simulador.traza().join("");
+  $("#btn-copiar-traza").hidden = false;
 
-  try {
-    estado.resolver();
-  } catch (e) {
-    mostrarError(e);
-    // Mostrar la traza parcial que se generó antes del error
-    $("#traza").innerHTML = estado.mostrarTraza().join("");
-    return;
+  if (simulador.finalizacion() === "limite") {
+    mostrarAviso("Se alcanzó el límite de ciclos — el programa puede no haber terminado. Aumentá el límite en configuración si es necesario.");
   }
-
-  $("#variables").innerText = mem.mostrarMemoria().join(" ");
-  $("#traza").innerHTML = estado.mostrarTraza().join("");
 }
 
 function mostrarError(e) {
   const panel = $("#panel-error");
+  panel.className = "panel-error--error";
   if (e instanceof ErrorSimulador) {
     panel.textContent = e.formatear();
   } else {
-    // Error inesperado de JS — igual mostrarlo
     panel.textContent = `Error inesperado: ${e.message}`;
     console.error(e);
   }
   panel.hidden = false;
 }
 
+function mostrarAviso(mensaje) {
+  const panel = $("#panel-error");
+  panel.className = "panel-error--aviso";
+  panel.textContent = mensaje;
+  panel.hidden = false;
+}
+
 function ocultarError() {
   $("#panel-error").hidden = true;
+  $("#panel-error").className = "";
 }
 
 function crearBotones(contenedor, categorias, funcionOnClick) {
-  categorias.forEach(({ categoria, ejemplos }) => {
+  categorias.forEach(({ categoria, ejemplos }, idx) => {
     const grupo = document.createElement("div");
     grupo.className = "ejemplo-grupo";
 
-    const label = document.createElement("span");
+    const slug = categoria.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
+
+    const label = document.createElement("button");
     label.className = "ejemplo-categoria";
     label.textContent = categoria;
+    label.setAttribute("aria-expanded", idx === 0 ? "true" : "false");
     grupo.appendChild(label);
 
     const botones = document.createElement("div");
     botones.className = "ejemplo-botones";
+    if (idx !== 0) botones.hidden = true;
+
     ejemplos.forEach(({ id, titulo, razon }) => {
       const btn = document.createElement("button");
-      const slug = categoria.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
       btn.className = `ejemplo-btn ejemplo-btn--${slug}`;
       btn.dataset.btnid = id;
       btn.title = razon;
@@ -131,6 +129,13 @@ function crearBotones(contenedor, categorias, funcionOnClick) {
       btn.addEventListener("click", funcionOnClick);
       botones.appendChild(btn);
     });
+
+    label.addEventListener("click", () => {
+      const abierto = label.getAttribute("aria-expanded") === "true";
+      label.setAttribute("aria-expanded", abierto ? "false" : "true");
+      botones.hidden = abierto;
+    });
+
     grupo.appendChild(botones);
     contenedor.appendChild(grupo);
   });
