@@ -89,7 +89,19 @@ export default class EstadoGlobal {
   lanzarHiloHijo(padre, nombre, instrucciones) {
     const id = this.threads.length;
     const hijo = padre._crearHijoConContexto(id, nombre, instrucciones);
+    hijo.padre = padre;
     this.threads.push(hijo);
     hijo.setEstadoGlobal(this);
+  }
+
+  terminarHilosHijos(padre) {
+    this.threads.forEach(th => {
+      if (th.padre === padre && th.estaPreparado()) {
+        th.preparado = false;
+        th.bloqueado = false;
+        th.informar("Terminado", `padre ${padre.nombre} terminó`);
+        this.terminarHilosHijos(th);
+      }
+    });
   }
 }

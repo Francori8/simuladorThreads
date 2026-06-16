@@ -101,6 +101,7 @@ export default class Hilo {
           this.retornarFuncion(null);
         } else {
           this.preparado = false;
+          this.estadoGlobal.terminarHilosHijos(this);
         }
       } else {
         this.proximaInstruccion = this.bloque.shift();
