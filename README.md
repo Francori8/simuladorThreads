@@ -299,6 +299,8 @@ Ejemplos de deadlock están en la categoría **Errores**:
 
 ### Ideas para v1+
 
+- **Web Worker** — mover toda la simulación a un Worker para que el main thread no se congele durante ejecuciones largas. La arquitectura actual lo permite: `Simulador` no toca el DOM directamente, solo hay que desacoplar la `consola` (actualmente un elemento DOM que se pasa como parámetro) para que acumule líneas en un array y las devuelva junto con la traza al terminar. El flujo sería: `script.js` crea el Worker, le manda `{ codigo, limiteRepeticiones, probabilidad }` via `postMessage`, el Worker corre `simulador.iniciar()` y responde con `{ traza, variables, consola, finalizacion, error }`, y `script.js` renderiza el resultado. También permite agregar un botón de cancelar (`worker.terminate()`).
+
 - **Mejor representación de objetos en la traza** — en vez de `[Buffer]`, mostrar el estado interno del objeto (atributos y sus valores actuales)
 
 - **Traza paso a paso** — modo donde el usuario avanza con un botón y ve la traza crecer en tiempo real. Requiere extraer "ejecutar un paso" como método en `Simulador` y mover el control del loop a `script.js` — la arquitectura actual ya está preparada para esto (`Simulador` es independiente de la UI)

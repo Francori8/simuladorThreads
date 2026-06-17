@@ -249,7 +249,7 @@ export class Imprimir extends Instruccion {
       this.valor.resolver(hilo);
     } else {
       const v = this.valor.resolverPuro();
-      this.consola.innerHTML += `<p>${v}</p>`;
+      this.consola.log(v);
       hilo.informar("Imprimir", v);
       this.resuelto = true;
     }

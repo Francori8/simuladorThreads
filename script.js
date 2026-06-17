@@ -1,6 +1,4 @@
-import Simulador from "./simulador.js";
 import ejemplos from "./ejemplo.js";
-import { ErrorSimulador } from "./errores.js";
 
 const $ = (arg) => document.querySelector(arg);
 
@@ -23,8 +21,9 @@ function agregarTab(e) {
 function cargar() {
   crearBotones($("#contenedorBotones"), ejemplos, modificarTexto);
   $("#ejecutar").addEventListener("click", ejecutarCodigo);
+  $("#cancelar").addEventListener("click", cancelarEjecucion);
   $("#btn-copiar-traza").addEventListener("click", () => {
-    navigator.clipboard.writeText(simulador.trazaTexto());
+    navigator.clipboard.writeText(ultimaTrazaTexto);
   });
 
   const btnToggle = $("#btn-toggle-ejemplos");
@@ -47,47 +46,88 @@ function modificarTexto(e) {
   }
 }
 
-const simulador = new Simulador();
+let workerActual = null;
+let ultimaTrazaTexto = "";
 
 function ejecutarCodigo() {
+  if (workerActual) {
+    workerActual.terminate();
+    workerActual = null;
+  }
+
   ocultarError();
-  const consola = $("#consola");
-  consola.innerText = "";
+  const consolaEl = $("#consola");
+  consolaEl.innerHTML = "";
   $("#traza").innerHTML = "";
   $("#variables").innerText = "";
   $("#btn-copiar-traza").hidden = true;
+  $("#cancelar").hidden = false;
+  $("#ejecutar").disabled = true;
 
-  try {
-    simulador.iniciar(
-      $("#codigo").value,
-      consola,
-      limiteDeRepeticionesActual(),
-      averiguarProbabilidad()
-    );
-  } catch (e) {
-    mostrarError(e);
-    $("#traza").innerHTML = simulador.traza().join("");
-    return;
+  const worker = new Worker("./simulador.worker.js", { type: "module" });
+  workerActual = worker;
+
+  worker.onmessage = ({ data }) => {
+    workerActual = null;
+    $("#cancelar").hidden = true;
+    $("#ejecutar").disabled = false;
+
+    data.consolaLines?.forEach(msg => {
+      consolaEl.innerHTML += `<p>${msg}</p>`;
+    });
+
+    if (!data.ok) {
+      mostrarErrorDesdeWorker(data.error);
+      $("#traza").innerHTML = (data.traza ?? []).join("");
+      return;
+    }
+
+    ultimaTrazaTexto = data.trazaTexto;
+    $("#variables").innerText = (data.variables ?? []).join(" ");
+    $("#traza").innerHTML = (data.traza ?? []).join("");
+    $("#btn-copiar-traza").hidden = false;
+
+    if (data.finalizacion === "limite") {
+      mostrarAviso("Se alcanzó el límite de ciclos — el programa puede no haber terminado. Aumentá el límite en configuración si es necesario.");
+    }
+  };
+
+  worker.onerror = (e) => {
+    workerActual = null;
+    $("#cancelar").hidden = true;
+    $("#ejecutar").disabled = false;
+    mostrarError(new Error(`Error del worker: ${e.message}`));
+  };
+
+  worker.postMessage({
+    codigo:             $("#codigo").value,
+    limiteRepeticiones: limiteDeRepeticionesActual(),
+    probabilidad:       averiguarProbabilidad(),
+  });
+}
+
+function cancelarEjecucion() {
+  if (workerActual) {
+    workerActual.terminate();
+    workerActual = null;
   }
-
-  $("#variables").innerText = simulador.variables().join(" ");
-  $("#traza").innerHTML = simulador.traza().join("");
-  $("#btn-copiar-traza").hidden = false;
-
-  if (simulador.finalizacion() === "limite") {
-    mostrarAviso("Se alcanzó el límite de ciclos — el programa puede no haber terminado. Aumentá el límite en configuración si es necesario.");
-  }
+  $("#cancelar").hidden = true;
+  $("#ejecutar").disabled = false;
+  mostrarAviso("Ejecución cancelada.");
 }
 
 function mostrarError(e) {
   const panel = $("#panel-error");
   panel.className = "panel-error--error";
-  if (e instanceof ErrorSimulador) {
-    panel.textContent = e.formatear();
-  } else {
-    panel.textContent = `Error inesperado: ${e.message}`;
-    console.error(e);
-  }
+  panel.textContent = `Error inesperado: ${e.message}`;
+  console.error(e);
+  panel.hidden = false;
+}
+
+function mostrarErrorDesdeWorker(err) {
+  const panel = $("#panel-error");
+  panel.className = "panel-error--error";
+  panel.textContent = err.esSimulador ? err.formateado : `Error inesperado: ${err.message}`;
   panel.hidden = false;
 }
 
