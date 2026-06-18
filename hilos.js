@@ -54,6 +54,10 @@ export default class Hilo {
     this.estadoGlobal = estadoGlobal;
   }
 
+  entrarAtomic() { this._atomicDepth = (this._atomicDepth ?? 0) + 1; }
+  salirAtomic()  { if (this._atomicDepth > 0) this._atomicDepth--; }
+  estaEnAtomic() { return (this._atomicDepth ?? 0) > 0; }
+
   estaPreparado()   { return this.preparado; }
   estaBloqueado()   { return this.bloqueado; }
   estaDurmiendo()   { return this._pasosSleep > 0; }
@@ -101,12 +105,35 @@ export default class Hilo {
           this.retornarFuncion(null);
         } else {
           this.preparado = false;
+          this.estadoGlobal.terminarHilosHijos(this);
         }
       } else {
         this.proximaInstruccion = this.bloque.shift();
       }
     }
     this.estadoGlobal.decidirQuienSigue();
+  }
+
+  // --- Versión generador para modo paso a paso ---
+
+  *ejecutarSiguienteInstruccionGen() {
+    if (!this.proximaInstruccion.estaResuelto()) {
+      this.proximaInstruccion.resolver(this);
+    }
+    if (this.proximaInstruccion.estaResuelto()) {
+      if (this.bloque.length === 0) {
+        if (this._callStack.length > 0) {
+          this.retornarFuncion(null);
+        } else {
+          this.preparado = false;
+          this.estadoGlobal.terminarHilosHijos(this);
+        }
+      } else {
+        this.proximaInstruccion = this.bloque.shift();
+      }
+    }
+    if (!this.estaEnAtomic()) yield; // pausa después de ejecutar — antes del próximo decidir
+    yield* this.estadoGlobal.decidirQuienSigueGen();
   }
 
   // --- Interfaz para las instrucciones ---
@@ -399,13 +426,14 @@ export default class Hilo {
 
   // --- Call stack de funciones ---
 
-  llamarFuncion(nombre, params, instruccionesTemplate, valores, instruccionLlamada) {
+  llamarFuncion(nombre, params, instruccionesTemplate, valores, instruccionLlamada, esAtomica = false) {
     this._callStack.push({
       bloque:              this.bloque,
       proximaInstruccion:  this.proximaInstruccion,
       memoriaLocal:        this.memoriaLocal,
       memoriaInstancia:    null,
       llamada:             instruccionLlamada,
+      atomic:              esAtomica,
     });
 
     const nuevoFrame = new Memoria();
@@ -488,6 +516,7 @@ export default class Hilo {
       return;
     }
     const frame = this._callStack.pop();
+    if (frame.atomic) this.salirAtomic();
     // Si era un frame de monitor, liberar el lock antes de restaurar
     if (frame.instanciaMonitor) {
       frame.instanciaMonitor.liberarLock(this);

@@ -135,7 +135,7 @@ class Parser {
         globals.push(this.parseGlobalDecl());
       } else if (this.check(TK.THREAD)) {
         threads.push(this.parseThread());
-      } else if (this.check(TK.FUNCTION)) {
+      } else if (this.check(TK.FUNCTION) || this.check(TK.ATOMIC)) {
         this.parseFunction();
       } else if (this.check(TK.CLASS)) {
         this.parseClass();
@@ -490,6 +490,8 @@ class Parser {
   }
 
   parseFunction() {
+    // atomic function ... o function ...
+    const esAtomica = this.match(TK.ATOMIC);
     this.expect(TK.FUNCTION);
 
     // Tipo de retorno opcional: function Int foo(...) o function foo(...)
@@ -510,7 +512,7 @@ class Parser {
 
     const instrucciones = this.parseBody(); // sin FinDeBloque — el Return lo termina
 
-    this.funciones[nombre] = { params, instrucciones };
+    this.funciones[nombre] = { params, instrucciones, atomic: !!esAtomica };
   }
 
   // process Nombre(c1, c2) { ... }

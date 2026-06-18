@@ -49,6 +49,8 @@ Thread(2){
         <div class="editor-footer">
           <div id="panel-error" hidden></div>
           <button id="ejecutar">Ejecutar</button>
+          <button id="cancelar" hidden>Cancelar</button>
+          <button id="btn-pasoapaso">Paso a paso</button>
         </div>
       </section>
 
@@ -70,8 +72,40 @@ Thread(2){
           </div>
           <div id="traza"></div>
         </div>
+
       </section>
     </main>
+
+    <!-- Panel modo paso a paso — ocupa todo el main cuando está activo -->
+    <div id="panel-pasoapaso" hidden>
+      <div id="pap-cuerpo">
+        <div id="pap-izq">
+          <h2 class="subtitulo">Threads</h2>
+          <div id="pap-threads"></div>
+          <h2 class="subtitulo pap-sec">Variables globales</h2>
+          <div id="pap-variables"></div>
+          <h2 class="subtitulo pap-sec">Consola</h2>
+          <div id="pap-consola"></div>
+        </div>
+        <div id="pap-derecha">
+          <h2 class="subtitulo">Traza</h2>
+          <div id="pap-traza"></div>
+        </div>
+      </div>
+      <div id="pap-controles">
+        <button id="pap-auto">▶ Auto</button>
+        <button id="pap-manual">Manual</button>
+        <button id="pap-pausa" disabled>⏸ Pausar</button>
+        <button id="pap-siguiente">→ Siguiente</button>
+        <button id="pap-reiniciar">↺ Reiniciar</button>
+        <button id="pap-cancelar">✕ Cancelar</button>
+        <label class="pap-velocidad-label">
+          Vel.
+          <input type="range" id="pap-velocidad" min="0" max="6" value="3" disabled />
+        </label>
+        <span id="pap-contador">Paso 0</span>
+      </div>
+    </div>
 
     <script type="module" src="./script.js"></script>
   </body>

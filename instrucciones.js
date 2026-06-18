@@ -249,7 +249,7 @@ export class Imprimir extends Instruccion {
       this.valor.resolver(hilo);
     } else {
       const v = this.valor.resolverPuro();
-      this.consola.innerHTML += `<p>${v}</p>`;
+      this.consola.log(v);
       hilo.informar("Imprimir", v);
       this.resuelto = true;
     }
@@ -834,7 +834,8 @@ export class LlamadaFuncion extends Instruccion {
       if (!def) throw new Error(`Función desconocida: ${this.nombre}`);
       const valoresArgs = this.argsExprs.map(a => a.resolverPuro());
       hilo.informar("Llamada", `${this.nombre}(${valoresArgs.join(", ")})`);
-      hilo.llamarFuncion(this.nombre, def.params, def.instrucciones, valoresArgs, this);
+      if (def.atomic) hilo.entrarAtomic();
+      hilo.llamarFuncion(this.nombre, def.params, def.instrucciones, valoresArgs, this, !!def.atomic);
       // El hilo ahora ejecuta instrucciones de la función.
       // Esta instrucción queda pendiente hasta que Return llame a retornarFuncion().
       return;
