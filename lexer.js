@@ -41,6 +41,7 @@ export const TK = Object.freeze({
   // Keywords Thread / Function
   THREAD:   "THREAD",
   FUNCTION: "FUNCTION",
+  ATOMIC:   "ATOMIC",
 
   // Identificador genérico
   IDENT: "IDENT",
@@ -112,6 +113,7 @@ const KEYWORDS = {
   "condition":   TK.CONDITION,
   "Thread":   TK.THREAD,
   "function": TK.FUNCTION,
+  "atomic":   TK.ATOMIC,
   "true":    TK.BOOL,
   "false":   TK.BOOL,
 };

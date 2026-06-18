@@ -1,4 +1,5 @@
 import ejemplos from "./ejemplo.js";
+import { iniciarModoStepByStep, cerrarModoStepByStep } from "./pasoapaso.js";
 
 const $ = (arg) => document.querySelector(arg);
 
@@ -22,6 +23,13 @@ function cargar() {
   crearBotones($("#contenedorBotones"), ejemplos, modificarTexto);
   $("#ejecutar").addEventListener("click", ejecutarCodigo);
   $("#cancelar").addEventListener("click", cancelarEjecucion);
+  $("#btn-pasoapaso").addEventListener("click", () => {
+    iniciarModoStepByStep(
+      $("#codigo").value,
+      limiteDeRepeticionesActual(),
+      averiguarProbabilidad()
+    );
+  });
   $("#btn-copiar-traza").addEventListener("click", () => {
     navigator.clipboard.writeText(ultimaTrazaTexto);
   });

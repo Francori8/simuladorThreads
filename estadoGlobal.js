@@ -36,8 +36,10 @@ export default class EstadoGlobal {
   }
 
   decidirQuienSigue() {
-    this.sortearSuerte();
-    const preparados = this.threadPreparados();
+    // Si hay un thread en atomic, no sortear — ese thread tiene prioridad
+    const enAtomic = this.threads.find(th => th.estaPreparado() && th.estaEnAtomic());
+    if (!enAtomic) this.sortearSuerte();
+    const preparados = enAtomic ? [enAtomic] : this.threadPreparados();
     if (preparados.length > 0) {
       preparados[0].ejecutarSiguienteInstruccion(this);
     } else {
@@ -70,6 +72,44 @@ export default class EstadoGlobal {
   resolver() {
     this.threads.forEach(th => th.setEstadoGlobal(this));
     this.decidirQuienSigue();
+  }
+
+  // --- Versión generador para modo paso a paso ---
+
+  *resolverGen() {
+    this.threads.forEach(th => th.setEstadoGlobal(this));
+    yield* this.decidirQuienSigueGen();
+  }
+
+  estaEnAtomic() {
+    return this.threads.some(th => th.estaPreparado() && th.estaEnAtomic());
+  }
+
+  *decidirQuienSigueGen() {
+    const enAtomic = this.threads.find(th => th.estaPreparado() && th.estaEnAtomic());
+    let elegido = null;
+    if (enAtomic) {
+      elegido = enAtomic;
+    } else if (this.threadIdForzado !== undefined && this.threadIdForzado !== null) {
+      elegido = this.threads.find(th => th.id === this.threadIdForzado && th.estaPreparado()) ?? null;
+      this.threadIdForzado = null;
+    }
+    if (!elegido) this.sortearSuerte();
+    const preparados = elegido ? [elegido] : this.threadPreparados();
+    if (preparados.length > 0) {
+      yield* preparados[0].ejecutarSiguienteInstruccionGen();
+    } else {
+      while (this.threadPreparados().length === 0 && this.threadsDurmiendo().length > 0) {
+        this.threadsDurmiendo().forEach(th => th.tickSleep());
+      }
+      if (this.threadPreparados().length > 0) {
+        yield* this.decidirQuienSigueGen();
+      } else if (this.threadsBloqueados().length > 0) {
+        this.informarDeadlock();
+      } else {
+        this.informarEstadoFinalizacionExitosa();
+      }
+    }
   }
 
   threadPreparados() {
