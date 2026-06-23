@@ -132,7 +132,6 @@ export default class Hilo {
         this.proximaInstruccion = this.bloque.shift();
       }
     }
-    if (!this.estaEnAtomic()) yield; // pausa después de ejecutar — antes del próximo decidir
     yield* this.estadoGlobal.decidirQuienSigueGen();
   }
 
