@@ -126,6 +126,7 @@ export default class Hilo {
           this.retornarFuncion(null);
         } else {
           this.preparado = false;
+          this.informar("Terminado", `thread finalizado`);
           this.estadoGlobal.terminarHilosHijos(this);
         }
       } else {
