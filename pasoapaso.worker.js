@@ -59,21 +59,28 @@ function siguiente() {
   if (!generador || modoActual === "terminado") return;
   try {
     if (threadIdElegido !== null) estadoGlobal.threadIdForzado = threadIdElegido;
+    const estadosAntes = estadoGlobal.estados.length;
     const result = generador.next();
-    threadIdElegido = null; // consumido
-    numeroPaso++;
 
-    const ultimoEstado = estadoGlobal.estados.at(-1);
-    self.postMessage({
-      tipo:        "paso",
-      numeroPaso,
-      paso:        ultimoEstado ? serializarEstado(ultimoEstado) : null,
-      threads:     snapshotThreads(),
-      variables:   mem.mostrarMemoria(),
-      consolaLines: [...consolaVirtual.lines],
-    });
+    const huboInstruccion = estadoGlobal.estados.length > estadosAntes;
+    if (huboInstruccion) threadIdElegido = null; // consumido solo si se ejecutó algo real
+
+    // Solo emitir paso si realmente se ejecutó algo
+    if (huboInstruccion) {
+      numeroPaso++;
+      const ultimoEstado = estadoGlobal.estados.at(-1);
+      self.postMessage({
+        tipo:        "paso",
+        numeroPaso,
+        paso:        ultimoEstado ? serializarEstado(ultimoEstado) : null,
+        threads:     snapshotThreads(),
+        variables:   mem.mostrarMemoria(),
+        consolaLines: [...consolaVirtual.lines],
+      });
+    }
 
     if (result.done) {
+      threadIdElegido = null;
       modoActual = "terminado";
       self.postMessage({
         tipo:        "fin",
@@ -83,9 +90,13 @@ function siguiente() {
       return;
     }
 
-    // En modo manual, emitir los threads preparados para que el usuario elija
     if (modoActual === "manual") {
-      emitirEsperando();
+      if (!huboInstruccion) {
+        // Yield de elección: consumirlo automáticamente (la elección sigue en threadIdForzado)
+        siguiente();
+      } else {
+        emitirEsperando();
+      }
     }
   } catch (e) {
     modoActual = "terminado";
@@ -108,28 +119,41 @@ function emitirEsperando() {
     nombre:             th.nombre,
     proximaInstruccion: th.proximaInstruccion?.toString() ?? null,
   }));
+  // Si no hay threads preparados para elegir (ej: todos durmiendo), avanzar automático
+  if (preparados.length === 0) {
+    siguiente();
+    return;
+  }
   self.postMessage({ tipo: "esperando", threads: preparados });
 }
 
 function activarAuto(idx) {
   modoActual = "auto";
+  if (estadoGlobal) estadoGlobal.setModoManual(false);
   velocidad = VELOCIDADES[idx] ?? 300;
   scheduleProximo();
 }
 
 function pausar() {
   modoActual = "pausado";
+  if (estadoGlobal) estadoGlobal.setModoManual(false);
   clearTimeout(timeoutId);
 }
 
 function activarModoManual() {
   clearTimeout(timeoutId);
   modoActual = "manual";
+  if (estadoGlobal) estadoGlobal.setModoManual(true);
   emitirEsperando();
 }
 
 function setVelocidad(idx) {
   velocidad = VELOCIDADES[idx] ?? 300;
+  // Si estamos en auto, resetear el timeout para aplicar la nueva velocidad de inmediato
+  if (modoActual === "auto") {
+    clearTimeout(timeoutId);
+    scheduleProximo();
+  }
 }
 
 function cancelar() {

@@ -126,13 +126,13 @@ export default class Hilo {
           this.retornarFuncion(null);
         } else {
           this.preparado = false;
+          this.informar("Terminado", `thread finalizado`);
           this.estadoGlobal.terminarHilosHijos(this);
         }
       } else {
         this.proximaInstruccion = this.bloque.shift();
       }
     }
-    if (!this.estaEnAtomic()) yield; // pausa después de ejecutar — antes del próximo decidir
     yield* this.estadoGlobal.decidirQuienSigueGen();
   }
 

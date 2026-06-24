@@ -1079,6 +1079,23 @@ export default [
         razon: "El productor duerme 3 pasos entre cada envío — el consumidor bloquea en receive() hasta que el productor se despierte y mande el siguiente valor",
       },
       {
+        id: "ch6",
+        titulo: "Padre mata hijos al terminar",
+        texto: [
+          "// Si el padre termina antes que los hijos, los hijos mueren con él",
+          "// Dependiendo del scheduling, los hijos pueden o no completar su trabajo",
+          "",
+          "process Padre(){",
+          "\tThread(3, 'Hijo'){",
+          "\t\tlocal Int id = getId()",
+          "\t\tprint(id)",
+          "\t}",
+          "\tprint('padre listo')",
+          "}",
+        ].join("\n"),
+        razon: "Si el Padre ejecuta su print antes que los hijos, termina y los hijos mueren — en consola puede aparecer solo 'padre listo', o también algunos ids dependiendo del scheduling",
+      },
+      {
         id: "ch4",
         titulo: "Threads dinámicos (servidor con loop)",
         texto: [

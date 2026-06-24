@@ -35,6 +35,10 @@ export default class EstadoGlobal {
     this.probabilidad = probabilidad;
   }
 
+  setModoManual(val) {
+    this.modoManual = val;
+  }
+
   decidirQuienSigue() {
     // Si hay un thread en atomic, no sortear — ese thread tiene prioridad
     const enAtomic = this.threads.find(th => th.estaPreparado() && th.estaEnAtomic());
@@ -86,6 +90,8 @@ export default class EstadoGlobal {
   }
 
   *decidirQuienSigueGen() {
+    if (!this.estaEnAtomic()) yield; // pausa acá — el worker inyecta threadIdForzado antes del next()
+
     const enAtomic = this.threads.find(th => th.estaPreparado() && th.estaEnAtomic());
     let elegido = null;
     if (enAtomic) {
@@ -94,7 +100,7 @@ export default class EstadoGlobal {
       elegido = this.threads.find(th => th.id === this.threadIdForzado && th.estaPreparado()) ?? null;
       this.threadIdForzado = null;
     }
-    if (!elegido) this.sortearSuerte();
+    if (!elegido && !this.modoManual) this.sortearSuerte();
     const preparados = elegido ? [elegido] : this.threadPreparados();
     if (preparados.length > 0) {
       yield* preparados[0].ejecutarSiguienteInstruccionGen();

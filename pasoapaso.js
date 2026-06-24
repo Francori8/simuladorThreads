@@ -88,6 +88,13 @@ function onPaso({ numeroPaso, paso, threads, variables, consolaLines }) {
   const threadIdActivo = paso?.threadId ?? null;
   threadActivoId = threadIdActivo;
 
+  // Deshabilitar clicks mientras se procesa el paso
+  $("pap-threads").querySelectorAll(".pap-thread-card").forEach(card => {
+    card.classList.remove("pap-thread-elegible");
+    card.style.cursor = "";
+    card.onclick = null;
+  });
+
   renderThreads(threads, threadIdActivo);
   renderVariables(variables);
   renderConsola(consolaLines);
@@ -183,10 +190,11 @@ function reiniciar() {
     worker = new Worker("./pasoapaso.worker.js", { type: "module" });
     worker.onmessage = ({ data }) => {
       switch (data.tipo) {
-        case "inicio": onInicio(data);  break;
-        case "paso":   onPaso(data);    break;
-        case "fin":    onFin(data);     break;
-        case "error":  onError(data);   break;
+        case "inicio":    onInicio(data);    break;
+        case "paso":      onPaso(data);      break;
+        case "fin":       onFin(data);       break;
+        case "error":     onError(data);     break;
+        case "esperando": onEsperando(data); break;
       }
     };
     worker.onerror = (e) => {
