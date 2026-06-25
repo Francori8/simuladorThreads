@@ -95,9 +95,10 @@ function onPaso({ numeroPaso, paso, threads, variables, consolaLines }) {
     card.onclick = null;
   });
 
-  renderThreads(threads, threadIdActivo);
-  renderVariables(variables);
-  renderConsola(consolaLines);
+  // threads/variables/consolaLines pueden ser null en pasos intermedios de atomic
+  if (threads)      renderThreads(threads, threadIdActivo);
+  if (variables)    renderVariables(variables);
+  if (consolaLines) renderConsola(consolaLines);
 
   if (paso) {
     agregarPasoTraza(paso);

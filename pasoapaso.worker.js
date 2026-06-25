@@ -62,20 +62,23 @@ function siguiente() {
     const estadosAntes = estadoGlobal.estados.length;
     const result = generador.next();
 
-    const huboInstruccion = estadoGlobal.estados.length > estadosAntes;
+    const estadosNuevos = estadoGlobal.estados.length - estadosAntes;
+    const huboInstruccion = estadosNuevos > 0;
     if (huboInstruccion) threadIdElegido = null; // consumido solo si se ejecutó algo real
 
-    // Solo emitir paso si realmente se ejecutó algo
-    if (huboInstruccion) {
+    // Emitir un mensaje por cada estado nuevo (puede haber varios si hubo atomic)
+    for (let i = estadosAntes; i < estadoGlobal.estados.length; i++) {
       numeroPaso++;
-      const ultimoEstado = estadoGlobal.estados.at(-1);
+      const estado = estadoGlobal.estados[i];
+      const esUltimo = i === estadoGlobal.estados.length - 1;
       self.postMessage({
         tipo:        "paso",
         numeroPaso,
-        paso:        ultimoEstado ? serializarEstado(ultimoEstado) : null,
-        threads:     snapshotThreads(),
-        variables:   mem.mostrarMemoria(),
-        consolaLines: [...consolaVirtual.lines],
+        paso:        serializarEstado(estado),
+        // Solo mandar snapshot actualizado en el último para no saturar
+        threads:     esUltimo ? snapshotThreads() : null,
+        variables:   esUltimo ? mem.mostrarMemoria() : null,
+        consolaLines: esUltimo ? [...consolaVirtual.lines] : null,
       });
     }
 
@@ -91,8 +94,8 @@ function siguiente() {
     }
 
     if (modoActual === "manual") {
-      if (!huboInstruccion) {
-        // Yield de elección: consumirlo automáticamente (la elección sigue en threadIdForzado)
+      if (!huboInstruccion || estadoGlobal.estaEnAtomic()) {
+        // Yield sin instrucción real, o hay un thread en atomic que no puede interrumpirse
         siguiente();
       } else {
         emitirEsperando();
