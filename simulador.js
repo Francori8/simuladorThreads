@@ -27,6 +27,10 @@ export default class Simulador {
     return this.mem?.mostrarMemoria() ?? [];
   }
 
+  historialVariablesGlobales() {
+    return this.estado?.historialVariablesGlobales() ?? {};
+  }
+
   finalizacion() {
     return this.estado?.finalizacion ?? null;
   }

@@ -301,13 +301,27 @@ Ejemplos de deadlock están en la categoría **Errores**:
 
 - **Web Worker** — mover toda la simulación a un Worker para que el main thread no se congele durante ejecuciones largas. La arquitectura actual lo permite: `Simulador` no toca el DOM directamente, solo hay que desacoplar la `consola` (actualmente un elemento DOM que se pasa como parámetro) para que acumule líneas en un array y las devuelva junto con la traza al terminar. El flujo sería: `script.js` crea el Worker, le manda `{ codigo, limiteRepeticiones, probabilidad }` via `postMessage`, el Worker corre `simulador.iniciar()` y responde con `{ traza, variables, consola, finalizacion, error }`, y `script.js` renderiza el resultado. También permite agregar un botón de cancelar (`worker.terminate()`).
 
-- **Mejor representación de objetos en la traza** — en vez de `[Buffer]`, mostrar el estado interno del objeto (atributos y sus valores actuales)
-
 - **Traza paso a paso** — modo donde el usuario avanza con un botón y ve la traza crecer en tiempo real. Requiere extraer "ejecutar un paso" como método en `Simulador` y mover el control del loop a `script.js` — la arquitectura actual ya está preparada para esto (`Simulador` es independiente de la UI)
 
 - **Otras formas de visualización** — diagrama de estados de threads (corriendo / bloqueado / durmiendo / terminado), línea de tiempo estilo Gantt, vista de memoria compartida en tiempo real
 
 - **Muerte de hijos al morir el padre** — si un proceso padre termina, los threads hijos que lanzó dinámicamente también deberían terminar
+
+### Mejoras educativas de UX
+
+- [x] **Leyenda de estados de thread** — tooltip explicando qué significa preparado/bloqueado/durmiendo/terminado en el panel paso a paso (`index.html`, `style.css`)
+- [x] **Tooltips en Probabilidad y Límite** — explican qué controla cada slider/opción del header
+- [x] **Sugerencias pedagógicas en errores** — `errores.js` agrega una pista (💡) según el patrón del mensaje (variable no declarada, deadlock, índice fuera de rango, etc.)
+- [x] **Comparar ejecuciones distintas del mismo código** — botón "Comparar 2 ejecuciones" abre un panel con dos columnas (variables/consola/traza) corriendo el mismo código con dos schedulers independientes; cada columna tiene su propio botón "↻ Reejecutar" (`index.html`, `style.css`, `script.js`)
+- [x] **Historial de cambios por variable global** — en `#variables` cada variable con 2+ escrituras muestra el valor final y un toggle (▸) para desplegar cómo fue cambiando y qué thread hizo cada escritura (`script.js`, `estadoGlobal.js`, `hilos.js`)
+- [x] **Representación de objetos en variables/traza** — `Instancia.toString()` (`clase.js`) e `InstanciaMonitor.toString()` (`monitor.js`) ahora muestran los atributos internos (ej. `Contador(valor: 3)`) en vez de `[Contador]`, usando un helper común `formatearAtributos()` (`memoria.js`) con protección de recursión consistente entre ambas clases
+- [ ] ~~Resaltar en el editor la línea correspondiente al pasar el mouse sobre un paso de la traza~~ — **descartado por ahora**. Investigado: el parser no propaga número de línea a las instrucciones hoy, pero sería viable agregarlo asignando `instr.linea` después de cada `new` en `parser.js` (sin tocar las ~55 clases de `instrucciones.js`). Se descarta igual porque el beneficio pedagógico es marginal (el alumno ya ve la instrucción como texto en la traza) frente al costo: tocar ~55 puntos del parser y resolver qué pasa si el código se edita después de ejecutar (la línea quedaría desincronizada)
+
+### Fixes de code review (sesión de code-review high sobre el diff de mejoras educativas)
+
+- [x] **Historial de variables con snapshot inmutable** — si una variable global es un objeto de clase (`Instancia`) que se muta luego vía métodos, el historial ahora guarda `valor.toString()` en el momento de la escritura (`hilos.js:escribir`), en vez de la referencia viva — antes todas las entradas pasadas del toggle mostraban el estado *final* mutado, no el histórico real
+- [x] **Deduplicación del modo "Comparar 2 ejecuciones"** — se extrajo `ejecutarYRenderizar()` en `script.js`, reusada tanto por `ejecutarCodigo()` como por `ejecutarEnColumna()`; de paso se unificó el estilo del panel de error (antes con estilos inline en el modo comparar) usando la clase CSS `panel-error--error` en ambos modos, y se unificó el escape de HTML en los mensajes de consola
+- [ ] ~~Resaltar en el editor la línea correspondiente al pasar el mouse sobre un paso de la traza~~ — **descartado por ahora**. Investigado: el parser no propaga número de línea a las instrucciones hoy, pero sería viable agregarlo asignando `instr.linea` después de cada `new` en `parser.js` (sin tocar las ~55 clases de `instrucciones.js`). Se descarta igual porque el beneficio pedagógico es marginal (el alumno ya ve la instrucción como texto en la traza) frente al costo: tocar ~55 puntos del parser y resolver qué pasa si el código se edita después de ejecutar (la línea quedaría desincronizada)
 
 ---
 

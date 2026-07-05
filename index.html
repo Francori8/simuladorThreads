@@ -14,10 +14,10 @@
           <h1>Simulador de Threads</h1>
         </div>
         <div class="header-controles">
-          <span class="config-label">Probabilidad</span>
-          <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0" />
-          <span class="config-label">Límite</span>
-          <div class="limite-ciclos-opciones">
+          <span class="config-label" title="Controla qué tan seguido el scheduler cambia de thread. En 0 tiende a dejar correr el mismo thread (más secuencial); al máximo cambia de thread con más frecuencia (más interleaving).">Probabilidad ⓘ</span>
+          <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0" title="Controla qué tan seguido el scheduler cambia de thread. En 0 tiende a dejar correr el mismo thread (más secuencial); al máximo cambia de thread con más frecuencia (más interleaving)." />
+          <span class="config-label" title="Máxima cantidad de vueltas que puede dar un while/repeat. Evita que un bucle mal sincronizado (ej. una condición que ningún thread cumple) cuelgue el simulador.">Límite ⓘ</span>
+          <div class="limite-ciclos-opciones" title="Máxima cantidad de vueltas que puede dar un while/repeat. Evita que un bucle mal sincronizado (ej. una condición que ningún thread cumple) cuelgue el simulador.">
             <input type="radio" name="limite" id="limite-5" value="5" />
             <label for="limite-5">5</label>
             <input type="radio" name="limite" id="limite-10" value="10" checked />
@@ -40,17 +40,14 @@
         <textarea name="codigo" id="codigo">global Int n = 0
 
 Thread(2){
-
-       while( n == 1){
-         n = n + 1
-       }
-
+	n = n + 1
 }</textarea>
         <div class="editor-footer">
           <div id="panel-error" hidden></div>
           <button id="ejecutar">Ejecutar</button>
           <button id="cancelar" hidden>Cancelar</button>
           <button id="btn-pasoapaso">Paso a paso</button>
+          <button id="btn-comparar" title="Corre el mismo código dos veces con dos scheduling distintos, para ver el no-determinismo en acción">Comparar 2 ejecuciones</button>
         </div>
       </section>
 
@@ -59,7 +56,7 @@ Thread(2){
           <div id="panel-salida">
             <div class="seccionEscrita">
               <h2 class="subtitulo">Variables globales</h2>
-              <p id="variables"></p>
+              <div id="variables"></div>
             </div>
             <div class="seccionEscrita">
               <h2 class="subtitulo">Consola</h2>
@@ -81,6 +78,12 @@ Thread(2){
       <div id="pap-cuerpo">
         <div id="pap-izq">
           <h2 class="subtitulo">Threads</h2>
+          <div class="pap-leyenda">
+            <span class="pap-leyenda-item" title="Puede ejecutar su próxima instrucción; el scheduler puede elegirlo en cualquier momento."><span class="pap-leyenda-punto" data-estado="preparado"></span>Preparado</span>
+            <span class="pap-leyenda-item" title="Está esperando un recurso (semáforo, monitor, canal) que otro thread todavía no liberó."><span class="pap-leyenda-punto" data-estado="bloqueado"></span>Bloqueado</span>
+            <span class="pap-leyenda-item" title="Ejecutó sleep(n) — sigue vivo pero no será elegido hasta que pasen n pasos del scheduler."><span class="pap-leyenda-punto" data-estado="durmiendo"></span>Durmiendo</span>
+            <span class="pap-leyenda-item" title="Ya ejecutó todas sus instrucciones; no vuelve a correr."><span class="pap-leyenda-punto" data-estado="terminado"></span>Terminado</span>
+          </div>
           <div id="pap-threads"></div>
           <h2 class="subtitulo pap-sec">Variables globales</h2>
           <div id="pap-variables"></div>
@@ -104,6 +107,48 @@ Thread(2){
           <input type="range" id="pap-velocidad" min="0" max="6" value="3" disabled />
         </label>
         <span id="pap-contador">Paso 0</span>
+      </div>
+    </div>
+
+    <!-- Panel de comparación de 2 ejecuciones — ocupa todo el main cuando está activo -->
+    <div id="panel-comparar" hidden>
+      <div class="cmp-header">
+        <h2 class="subtitulo">Comparar 2 ejecuciones — mismo código, mismo scheduler probabilístico, resultados distintos</h2>
+        <button id="cmp-volver">✕ Volver al editor</button>
+      </div>
+      <div id="cmp-cuerpo">
+        <div class="cmp-columna" id="cmp-col-a">
+          <div class="cmp-columna-header">
+            <h3 class="cmp-titulo-columna">Ejecución A</h3>
+            <button class="cmp-reejecutar" title="Volver a correr solo esta ejecución con un nuevo scheduling">↻ Reejecutar</button>
+          </div>
+          <div class="seccionEscrita">
+            <h2 class="subtitulo">Variables globales</h2>
+            <div class="cmp-variables"></div>
+          </div>
+          <div class="seccionEscrita">
+            <h2 class="subtitulo">Consola</h2>
+            <div class="cmp-consola"></div>
+          </div>
+          <h2 class="subtitulo">Traza</h2>
+          <div class="cmp-traza"></div>
+        </div>
+        <div class="cmp-columna" id="cmp-col-b">
+          <div class="cmp-columna-header">
+            <h3 class="cmp-titulo-columna">Ejecución B</h3>
+            <button class="cmp-reejecutar" title="Volver a correr solo esta ejecución con un nuevo scheduling">↻ Reejecutar</button>
+          </div>
+          <div class="seccionEscrita">
+            <h2 class="subtitulo">Variables globales</h2>
+            <div class="cmp-variables"></div>
+          </div>
+          <div class="seccionEscrita">
+            <h2 class="subtitulo">Consola</h2>
+            <div class="cmp-consola"></div>
+          </div>
+          <h2 class="subtitulo">Traza</h2>
+          <div class="cmp-traza"></div>
+        </div>
       </div>
     </div>
 

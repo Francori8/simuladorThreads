@@ -175,6 +175,10 @@ function darSiguiente() {
 function reiniciar() {
   if (worker) { worker.terminate(); worker = null; }
   if (ultimaConfig) {
+    const porcentaje = $("porcentaje");
+    if (porcentaje) {
+      ultimaConfig.probabilidad = porcentaje.value * (100 / porcentaje.max / 100);
+    }
     const { codigo, limiteRepeticiones, probabilidad } = ultimaConfig;
     // Resetear UI sin salir del modo
     numeroPasoActual = 0;
@@ -345,7 +349,7 @@ function setControles(modo) {
       btnPausa.disabled  = true;
       btnSig.disabled    = false;
       btnRei.disabled    = false;
-      sliderVel.disabled = true;
+      sliderVel.disabled = false;
       break;
     case "auto":
       btnAuto.disabled   = true;
@@ -361,7 +365,7 @@ function setControles(modo) {
       btnPausa.disabled  = true;
       btnSig.disabled    = true; // en manual se elige desde las tarjetas
       btnRei.disabled    = false;
-      sliderVel.disabled = true;
+      sliderVel.disabled = false;
       break;
     case "terminado":
       btnAuto.disabled   = true;
@@ -369,7 +373,7 @@ function setControles(modo) {
       btnPausa.disabled  = true;
       btnSig.disabled    = true;
       btnRei.disabled    = false;
-      sliderVel.disabled = true;
+      sliderVel.disabled = false;
       break;
   }
 }

@@ -33,6 +33,10 @@ function cargar() {
   $("#btn-copiar-traza").addEventListener("click", () => {
     navigator.clipboard.writeText(ultimaTrazaTexto);
   });
+  $("#btn-comparar").addEventListener("click", iniciarComparacion);
+  $("#cmp-volver").addEventListener("click", cerrarComparacion);
+  $("#cmp-col-a .cmp-reejecutar").addEventListener("click", () => ejecutarEnColumna("#cmp-col-a"));
+  $("#cmp-col-b .cmp-reejecutar").addEventListener("click", () => ejecutarEnColumna("#cmp-col-b"));
 
   const btnToggle = $("#btn-toggle-ejemplos");
   const panelEjemplos = $("#panel-ejemplos");
@@ -57,6 +61,50 @@ function modificarTexto(e) {
 let workerActual = null;
 let ultimaTrazaTexto = "";
 
+// Lanza un Worker que corre `codigo` y renderiza el resultado en los elementos dados.
+// Reusado por el modo "Ejecutar" normal y por cada columna del modo "Comparar" —
+// la única diferencia entre ambos es qué contenedores DOM se actualizan y algunos
+// callbacks opcionales (aviso de límite de ciclos, botón de copiar traza, etc.)
+function ejecutarYRenderizar({
+  codigo,
+  limiteRepeticiones,
+  probabilidad,
+  elVariables,
+  elConsola,
+  elTraza,
+  onError,
+  onFinOk,
+  onFinalizar, // se llama siempre al terminar (éxito o error), antes que onError/onFinOk
+}) {
+  const worker = new Worker("./simulador.worker.js", { type: "module" });
+
+  worker.onmessage = ({ data }) => {
+    onFinalizar?.();
+
+    data.consolaLines?.forEach(msg => {
+      elConsola.innerHTML += `<p>${escaparHtml(msg)}</p>`;
+    });
+
+    if (!data.ok) {
+      elTraza.innerHTML = (data.traza ?? []).join("");
+      onError(data.error);
+      return;
+    }
+
+    renderVariables(elVariables, data.variables ?? [], data.historialVariables ?? {});
+    elTraza.innerHTML = (data.traza ?? []).join("");
+    onFinOk(data);
+  };
+
+  worker.onerror = (e) => {
+    onFinalizar?.();
+    onError({ esSimulador: false, message: `Error del worker: ${e.message}` });
+  };
+
+  worker.postMessage({ codigo, limiteRepeticiones, probabilidad });
+  return worker;
+}
+
 function ejecutarCodigo() {
   if (workerActual) {
     workerActual.terminate();
@@ -67,50 +115,79 @@ function ejecutarCodigo() {
   const consolaEl = $("#consola");
   consolaEl.innerHTML = "";
   $("#traza").innerHTML = "";
-  $("#variables").innerText = "";
+  $("#variables").innerHTML = "";
   $("#btn-copiar-traza").hidden = true;
   $("#cancelar").hidden = false;
   $("#ejecutar").disabled = true;
 
-  const worker = new Worker("./simulador.worker.js", { type: "module" });
-  workerActual = worker;
-
-  worker.onmessage = ({ data }) => {
-    workerActual = null;
-    $("#cancelar").hidden = true;
-    $("#ejecutar").disabled = false;
-
-    data.consolaLines?.forEach(msg => {
-      consolaEl.innerHTML += `<p>${msg}</p>`;
-    });
-
-    if (!data.ok) {
-      mostrarErrorDesdeWorker(data.error);
-      $("#traza").innerHTML = (data.traza ?? []).join("");
-      return;
-    }
-
-    ultimaTrazaTexto = data.trazaTexto;
-    $("#variables").innerText = (data.variables ?? []).join(" ");
-    $("#traza").innerHTML = (data.traza ?? []).join("");
-    $("#btn-copiar-traza").hidden = false;
-
-    if (data.finalizacion === "limite") {
-      mostrarAviso("Se alcanzó el límite de ciclos — el programa puede no haber terminado. Aumentá el límite en configuración si es necesario.");
-    }
-  };
-
-  worker.onerror = (e) => {
-    workerActual = null;
-    $("#cancelar").hidden = true;
-    $("#ejecutar").disabled = false;
-    mostrarError(new Error(`Error del worker: ${e.message}`));
-  };
-
-  worker.postMessage({
+  workerActual = ejecutarYRenderizar({
     codigo:             $("#codigo").value,
     limiteRepeticiones: limiteDeRepeticionesActual(),
     probabilidad:       averiguarProbabilidad(),
+    elVariables:        $("#variables"),
+    elConsola:          consolaEl,
+    elTraza:            $("#traza"),
+    onFinalizar: () => {
+      workerActual = null;
+      $("#cancelar").hidden = true;
+      $("#ejecutar").disabled = false;
+    },
+    onError: (err) => mostrarErrorDesdeWorker(err),
+    onFinOk: (data) => {
+      ultimaTrazaTexto = data.trazaTexto;
+      $("#btn-copiar-traza").hidden = false;
+      if (data.finalizacion === "limite") {
+        mostrarAviso("Se alcanzó el límite de ciclos — el programa puede no haber terminado. Aumentá el límite en configuración si es necesario.");
+      }
+    },
+  });
+}
+
+function escaparHtml(texto) {
+  const div = document.createElement("div");
+  div.textContent = texto;
+  return div.innerHTML;
+}
+
+function renderVariables(contenedor, variables, historial) {
+  contenedor.innerHTML = "";
+
+  variables.forEach(linea => {
+    const idx = linea.indexOf(":");
+    const nombre = idx === -1 ? linea : linea.substring(0, idx).trim();
+    const valorFinal = idx === -1 ? "" : linea.substring(idx + 1).trim();
+    const cambios = historial[nombre];
+
+    const fila = document.createElement("div");
+    fila.className = "variable-fila";
+
+    if (!cambios || cambios.length < 2) {
+      fila.innerHTML = `<span class="variable-nombre">${escaparHtml(linea)}</span>`;
+      contenedor.appendChild(fila);
+      return;
+    }
+
+    const toggle = document.createElement("button");
+    toggle.className = "variable-toggle";
+    toggle.type = "button";
+    toggle.title = "Ver historial de cambios de esta variable";
+    toggle.innerHTML = `<span class="variable-toggle-icono">▸</span> <span class="variable-nombre">${escaparHtml(nombre)}:</span> ${escaparHtml(valorFinal)}`;
+
+    const detalle = document.createElement("div");
+    detalle.className = "variable-historial";
+    detalle.hidden = true;
+    detalle.innerHTML = cambios
+      .map(c => `<span class="variable-paso">${escaparHtml(c.valor)} <span class="variable-thread">(${escaparHtml(c.threadLabel)})</span></span>`)
+      .join(`<span class="variable-flecha"> → </span>`);
+
+    toggle.addEventListener("click", () => {
+      detalle.hidden = !detalle.hidden;
+      toggle.classList.toggle("variable-toggle-abierto", !detalle.hidden);
+    });
+
+    fila.appendChild(toggle);
+    fila.appendChild(detalle);
+    contenedor.appendChild(fila);
   });
 }
 
@@ -122,6 +199,73 @@ function cancelarEjecucion() {
   $("#cancelar").hidden = true;
   $("#ejecutar").disabled = false;
   mostrarAviso("Ejecución cancelada.");
+}
+
+const workersComparar = { "#cmp-col-a": null, "#cmp-col-b": null };
+let codigoComparar = null; // fijo mientras el panel está abierto — el editor queda oculto/no editable
+
+function iniciarComparacion() {
+  if (workerActual) {
+    workerActual.terminate();
+    workerActual = null;
+  }
+  ocultarError();
+
+  $("main").hidden = true;
+  $("#panel-comparar").hidden = false;
+
+  codigoComparar = $("#codigo").value;
+
+  ejecutarEnColumna("#cmp-col-a");
+  ejecutarEnColumna("#cmp-col-b");
+}
+
+function ejecutarEnColumna(selectorColumna) {
+  const columna  = $(selectorColumna);
+  const variablesEl = columna.querySelector(".cmp-variables");
+  const consolaEl   = columna.querySelector(".cmp-consola");
+  const trazaEl     = columna.querySelector(".cmp-traza");
+  const btnReejecutar = columna.querySelector(".cmp-reejecutar");
+
+  if (workersComparar[selectorColumna]) {
+    workersComparar[selectorColumna].terminate();
+  }
+
+  variablesEl.textContent = "Ejecutando…";
+  consolaEl.innerHTML = "";
+  trazaEl.innerHTML = "";
+  btnReejecutar.disabled = true;
+
+  workersComparar[selectorColumna] = ejecutarYRenderizar({
+    codigo:             codigoComparar,
+    limiteRepeticiones: limiteDeRepeticionesActual(),
+    probabilidad:       averiguarProbabilidad(),
+    elVariables:        variablesEl,
+    elConsola:          consolaEl,
+    elTraza:            trazaEl,
+    onFinalizar: () => {
+      workersComparar[selectorColumna] = null;
+      btnReejecutar.disabled = false;
+    },
+    onError: (err) => {
+      variablesEl.innerHTML = "";
+      const errPanel = document.createElement("div");
+      errPanel.className = "panel-error--error";
+      errPanel.textContent = err.esSimulador ? err.formateado : `Error inesperado: ${err.message}`;
+      variablesEl.appendChild(errPanel);
+    },
+    onFinOk: () => {},
+  });
+}
+
+function cerrarComparacion() {
+  Object.keys(workersComparar).forEach(key => {
+    workersComparar[key]?.terminate();
+    workersComparar[key] = null;
+  });
+  codigoComparar = null;
+  $("#panel-comparar").hidden = true;
+  $("main").hidden = false;
 }
 
 function mostrarError(e) {

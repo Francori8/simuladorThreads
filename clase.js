@@ -1,4 +1,4 @@
-import Memoria from "./memoria.js";
+import Memoria, { formatearAtributos } from "./memoria.js";
 
 /**
  * Representa la definición de una clase.
@@ -71,7 +71,11 @@ export class Instancia {
     return new Instancia(this.nombreClase, mem);
   }
 
-  toString() {
-    return `[${this.nombreClase}]`;
+  toString(profundidad = 0) {
+    if (profundidad >= 3) return `[${this.nombreClase}]`;
+    const atributos = formatearAtributos(this.memoriaInstancia, profundidad, (valor, p) =>
+      valor instanceof Instancia ? valor.toString(p + 1) : valor
+    );
+    return `${this.nombreClase}(${atributos})`;
   }
 }

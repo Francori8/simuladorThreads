@@ -17,6 +17,7 @@ self.onmessage = function ({ data }) {
       consolaLines: consolaVirtual.lines,
       traza:        sim.traza(),
       variables:    sim.variables(),
+      historialVariables: sim.historialVariablesGlobales(),
       finalizacion: sim.finalizacion(),
       trazaTexto:   sim.trazaTexto(),
     });

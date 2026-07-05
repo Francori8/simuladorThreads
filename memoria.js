@@ -65,3 +65,13 @@ class Variable{
         return this.nombre + ": " + this.valor
    }
 }
+
+// Formatea los atributos de una Memoria como "nombre: valor, nombre: valor".
+// Los valores que son instancias de clases con su propio formateo anidado (Instancia,
+// InstanciaMonitor) reciben la profundidad actual vía el callback `formatearValor` —
+// así este módulo no necesita conocer esas clases (evita import circular con clase.js/monitor.js).
+export function formatearAtributos(memoria, profundidad, formatearValor) {
+    return memoria.contenido
+        .map(v => `${v.nombre}: ${formatearValor(v.verValor(), profundidad)}`)
+        .join(", ");
+}
