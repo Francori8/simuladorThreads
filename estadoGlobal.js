@@ -23,6 +23,19 @@ export default class EstadoGlobal {
     );
   }
 
+  // Historial de valores de cada variable global a lo largo de la ejecución,
+  // usando la meta estructurada que Estado guarda en las escrituras globales.
+  historialVariablesGlobales() {
+    const historial = {};
+    for (const e of this.estados) {
+      const meta = e.getMeta?.();
+      if (!meta) continue;
+      if (!historial[meta.nombre]) historial[meta.nombre] = [];
+      historial[meta.nombre].push({ valor: meta.valor, threadLabel: e.threadLabel() });
+    }
+    return historial;
+  }
+
   informarEstadoFinalizacionPorMaximoCiclos() {
     this.finalizacion = "limite";
   }

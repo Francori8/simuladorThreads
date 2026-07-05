@@ -1,6 +1,7 @@
 export class ErrorSimulador extends Error {
   constructor(tipo, mensaje, contexto = {}) {
     super(mensaje);
+    this.esSimulador = true;
     this.tipo     = tipo;    // "parse" | "runtime"
     this.contexto = contexto; // { linea?, threadId?, instruccion? }
   }
@@ -25,6 +26,33 @@ export class ErrorSimulador extends Error {
       if (instruccion)      partes.push(`→ ${instruccion}`);
     }
     partes.push(`\n${this.message}`);
+    const sugerencia = sugerirCausa(this.message);
+    if (sugerencia) partes.push(`\n💡 ${sugerencia}`);
     return partes.join(" ");
   }
+}
+
+function sugerirCausa(mensaje) {
+  if (/no está declarada/.test(mensaje)) {
+    return `¿Olvidaste declararla con "global" o "local" antes de usarla?`;
+  }
+  if (/^Deadlock/.test(mensaje)) {
+    return `Revisá el orden en que los threads piden los mismos recursos (semáforos, monitores) — si dos threads los piden en orden distinto, cada uno puede quedar esperando al otro.`;
+  }
+  if (/no es una lista/.test(mensaje)) {
+    return `Declarála con el tipo "List" para poder indexarla con [i].`;
+  }
+  if (/fuera de rango/.test(mensaje)) {
+    return `El índice tiene que estar entre 0 y (tamaño - 1) de la lista.`;
+  }
+  if (/Método desconocido/.test(mensaje)) {
+    return `Revisá que el método esté definido dentro de la clase o monitor, y que el nombre esté bien escrito.`;
+  }
+  if (/wait\/notify usado fuera de un monitor/.test(mensaje)) {
+    return `"wait" y "notify" solo se pueden usar dentro de métodos de un monitor.`;
+  }
+  if (/Se esperaba/.test(mensaje)) {
+    return `Revisá que no falte un paréntesis, llave o punto y coma cerca de esa línea.`;
+  }
+  return null;
 }

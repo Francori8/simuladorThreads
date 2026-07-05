@@ -1,4 +1,5 @@
-import Memoria from "./memoria.js";
+import Memoria, { formatearAtributos } from "./memoria.js";
+import { Instancia } from "./clase.js";
 
 /**
  * Cola FIFO de threads bloqueados en una variable de condición.
@@ -174,5 +175,11 @@ export class InstanciaMonitor {
     return this.variablesCondicion["_default"];
   }
 
-  toString() { return `[${this.nombreMonitor}]`; }
+  toString(profundidad = 0) {
+    if (profundidad >= 3) return `[${this.nombreMonitor}]`;
+    const atributos = formatearAtributos(this.memoriaInstancia, profundidad, (valor, p) =>
+      valor instanceof Instancia ? valor.toString(p + 1) : valor
+    );
+    return `${this.nombreMonitor}(${atributos})`;
+  }
 }

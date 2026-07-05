@@ -252,7 +252,13 @@ export default class Hilo {
         this._memoriaContextoPadre.agregarVariable(nombre, valor);
         this.informar("Escritura", `proceso.${nombre} : ${valor}`);
       } else if (this.memoriaCompartida.hayVariable(nombre)) {
-        this.informar("Escritura", `global.${nombre} : ${valor}`);
+        // Los objetos mutables (Instancia/InstanciaMonitor) se guardan como snapshot
+        // de texto en el historial — si no, todas las entradas pasadas terminarían
+        // mostrando el estado *actual* del objeto (misma referencia mutada in-place).
+        const valorHistorial = (valor instanceof Instancia || valor instanceof InstanciaMonitor)
+          ? valor.toString()
+          : valor;
+        this.informar("Escritura", `global.${nombre} : ${valor}`, { scope: "global", nombre, valor: valorHistorial });
         this.memoriaCompartida.agregarVariable(nombre, valor);
       } else {
         this.memoriaLocal.agregarVariable(nombre, valor);
@@ -263,10 +269,10 @@ export default class Hilo {
   pushContexto(instruccion) { this._contexto.push(instruccion); }
   popContexto() { this._contexto.pop(); }
 
-  informar(tipo, detalle) {
+  informar(tipo, detalle, meta = null) {
     const ctx = this._contexto.length > 0 ? this._contexto.at(-1) : this.proximaInstruccion;
     this.estadoGlobal.informar(
-      new Estado(this.id, this.nombre, tipo, detalle, ctx?.toString() || "")
+      new Estado(this.id, this.nombre, tipo, detalle, ctx?.toString() || "", meta)
     );
   }
 
@@ -577,12 +583,13 @@ class _LiteralInstancia {
 }
 
 class Estado {
-  constructor(idThread, nombreThread, operacion, texto, instruccion) {
+  constructor(idThread, nombreThread, operacion, texto, instruccion, meta = null) {
     this.thread = idThread;
     this.nombre = nombreThread;
     this.operacion = operacion;
     this.texto = texto;
     this.instruccion = instruccion;
+    this.meta = meta; // { scope, nombre, valor } — solo presente en escrituras globales
   }
 
   threadId() { return this.thread; }
@@ -590,4 +597,5 @@ class Estado {
   estiloDeOperacion() { return this.operacion; }
   desarrollo() { return this.texto; }
   getInstruccion() { return this.instruccion; }
+  getMeta() { return this.meta; }
 }
