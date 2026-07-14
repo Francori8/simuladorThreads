@@ -299,11 +299,10 @@ Ejemplos de deadlock están en la categoría **Errores**:
 
 ### Ideas para v1+
 
-- **Web Worker** — mover toda la simulación a un Worker para que el main thread no se congele durante ejecuciones largas. La arquitectura actual lo permite: `Simulador` no toca el DOM directamente, solo hay que desacoplar la `consola` (actualmente un elemento DOM que se pasa como parámetro) para que acumule líneas en un array y las devuelva junto con la traza al terminar. El flujo sería: `script.js` crea el Worker, le manda `{ codigo, limiteRepeticiones, probabilidad }` via `postMessage`, el Worker corre `simulador.iniciar()` y responde con `{ traza, variables, consola, finalizacion, error }`, y `script.js` renderiza el resultado. También permite agregar un botón de cancelar (`worker.terminate()`).
+- [x] **Web Worker** — implementado en `simulador.worker.js`, mueve la ejecución completa fuera del main thread
+- [x] **Traza paso a paso** — implementado en `pasoapaso.js` + `pasoapaso.worker.js`
 
-- **Traza paso a paso** — modo donde el usuario avanza con un botón y ve la traza crecer en tiempo real. Requiere extraer "ejecutar un paso" como método en `Simulador` y mover el control del loop a `script.js` — la arquitectura actual ya está preparada para esto (`Simulador` es independiente de la UI)
-
-- **Otras formas de visualización** — diagrama de estados de threads (corriendo / bloqueado / durmiendo / terminado), línea de tiempo estilo Gantt, vista de memoria compartida en tiempo real
+- **Otras formas de visualización** — línea de tiempo estilo Gantt, vista de memoria compartida en tiempo real
 
 - **Muerte de hijos al morir el padre** — si un proceso padre termina, los threads hijos que lanzó dinámicamente también deberían terminar
 
@@ -327,12 +326,42 @@ Ejemplos de deadlock están en la categoría **Errores**:
 
 ## Arquitectura
 
+### Flujo general
+
+```
+código (texto)
+   │
+   ▼
+lexer.js ──tokens──► parser.js ──instrucciones──► simulador.js
+                                                       │
+                                          crea hilos.js (uno por Thread)
+                                          y coordina con estadoGlobal.js
+                                          (scheduler probabilístico)
+                                                       │
+                                                       ▼
+                                          traza + variables + consola
+                                                       │
+                                                       ▼
+                                    script.js / pasoapaso.js (renderizan en el DOM)
+```
+
+`simulador.js` no toca el DOM: recibe código y devuelve datos (traza, variables, consola). Esto es lo que permite correrlo tanto en el hilo principal (`script.js`) como dentro de un Web Worker (`simulador.worker.js`, `pasoapaso.worker.js`) sin congelar la UI durante ejecuciones largas.
+
+Hay dos modos de ejecución, cada uno con su propio worker:
+- **Ejecución completa** (`simulador.worker.js`): corre todo el programa de una vez y devuelve la traza completa al terminar.
+- **Paso a paso** (`pasoapaso.worker.js` + `pasoapaso.js`): expone un método para avanzar de a una instrucción, permitiendo pausar, ir manual o automático, y ver el estado de cada thread (preparado/bloqueado/durmiendo/terminado) en tiempo real.
+
+### Archivos
+
 | Archivo | Rol |
 |---|---|
 | `index.html` | UI: editor, controles, paneles de salida |
 | `style.css` | Estilos |
-| `script.js` | Punto de entrada: inicializa UI y conecta eventos |
+| `script.js` | Punto de entrada: inicializa UI, conecta eventos y delega en `simulador.worker.js` |
 | `simulador.js` | Orquesta ejecución: parseo, estado global, expone `iniciar()` y `trazaTexto()` |
+| `simulador.worker.js` | Web Worker que corre `Simulador` para una ejecución completa sin bloquear la UI |
+| `pasoapaso.js` | Controla el modo paso a paso desde la UI: arranca `pasoapaso.worker.js`, maneja auto/manual/pausa y renderiza cada paso |
+| `pasoapaso.worker.js` | Web Worker que ejecuta el programa instrucción por instrucción y reporta el estado tras cada paso |
 | `lexer.js` | Tokeniza el pseudocódigo |
 | `parser.js` | Convierte tokens en instrucciones ejecutables |
 | `instrucciones.js` | Clases de instrucciones (assign, if, while, semáforos, monitores, canales, sleep, etc.) |

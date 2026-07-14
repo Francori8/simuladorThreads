@@ -1,23 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Simulador de Threads</title>
+    <meta name="description" content="Simulador educativo de threads: escribí código concurrente con hilos, semáforos, monitores y canales, y visualizá paso a paso el scheduling y las condiciones de carrera en el navegador." />
+    <meta name="theme-color" content="#1a1d23" />
+    <link rel="canonical" href="https://francori8.github.io/simuladorThreads/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://francori8.github.io/simuladorThreads/" />
+    <meta property="og:title" content="Simulador de Threads" />
+    <meta property="og:description" content="Simulador educativo de threads: escribí código concurrente y visualizá paso a paso el scheduling, semáforos, monitores y canales." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Simulador de Threads" />
+    <meta name="twitter:description" content="Simulador educativo de threads: escribí código concurrente y visualizá paso a paso el scheduling, semáforos, monitores y canales." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚦</text></svg>">
+    <title>Simulador de Threads — visualizador de concurrencia paso a paso</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
+    <a href="#contenedorDeTexto" class="skip-link">Saltar al editor de código</a>
     <header>
       <div class="header-bar">
         <div class="header-izq">
-          <button id="btn-toggle-ejemplos" class="btn-toggle-ejemplos" aria-expanded="true" title="Mostrar/ocultar ejemplos">☰</button>
+          <button id="btn-toggle-ejemplos" class="btn-toggle-ejemplos" aria-expanded="true" aria-label="Mostrar u ocultar panel de ejemplos" title="Mostrar/ocultar ejemplos">☰</button>
           <h1>Simulador de Threads</h1>
         </div>
         <div class="header-controles">
-          <span class="config-label" title="Controla qué tan seguido el scheduler cambia de thread. En 0 tiende a dejar correr el mismo thread (más secuencial); al máximo cambia de thread con más frecuencia (más interleaving).">Probabilidad ⓘ</span>
+          <label class="config-label" for="porcentaje" title="Controla qué tan seguido el scheduler cambia de thread. En 0 tiende a dejar correr el mismo thread (más secuencial); al máximo cambia de thread con más frecuencia (más interleaving).">Probabilidad ⓘ</label>
           <input type="range" name="porcentaje" id="porcentaje" min="0" max="6" value="0" title="Controla qué tan seguido el scheduler cambia de thread. En 0 tiende a dejar correr el mismo thread (más secuencial); al máximo cambia de thread con más frecuencia (más interleaving)." />
-          <span class="config-label" title="Máxima cantidad de vueltas que puede dar un while/repeat. Evita que un bucle mal sincronizado (ej. una condición que ningún thread cumple) cuelgue el simulador.">Límite ⓘ</span>
-          <div class="limite-ciclos-opciones" title="Máxima cantidad de vueltas que puede dar un while/repeat. Evita que un bucle mal sincronizado (ej. una condición que ningún thread cumple) cuelgue el simulador.">
+          <span class="config-label" id="limite-label" title="Máxima cantidad de vueltas que puede dar un while/repeat. Evita que un bucle mal sincronizado (ej. una condición que ningún thread cumple) cuelgue el simulador.">Límite ⓘ</span>
+          <div class="limite-ciclos-opciones" role="group" aria-labelledby="limite-label" title="Máxima cantidad de vueltas que puede dar un while/repeat. Evita que un bucle mal sincronizado (ej. una condición que ningún thread cumple) cuelgue el simulador.">
             <input type="radio" name="limite" id="limite-5" value="5" />
             <label for="limite-5">5</label>
             <input type="radio" name="limite" id="limite-10" value="10" checked />
@@ -37,13 +49,14 @@
       </aside>
 
       <section id="contenedorDeTexto">
+        <label for="codigo" class="sr-only">Código del programa concurrente a simular</label>
         <textarea name="codigo" id="codigo">global Int n = 0
 
 Thread(2){
 	n = n + 1
 }</textarea>
         <div class="editor-footer">
-          <div id="panel-error" hidden></div>
+          <div id="panel-error" hidden role="alert" aria-live="assertive"></div>
           <button id="ejecutar">Ejecutar</button>
           <button id="cancelar" hidden>Cancelar</button>
           <button id="btn-pasoapaso">Paso a paso</button>
@@ -96,17 +109,17 @@ Thread(2){
         </div>
       </div>
       <div id="pap-controles">
-        <button id="pap-auto">▶ Auto</button>
+        <button id="pap-auto" aria-label="Ejecutar automáticamente">▶ Auto</button>
         <button id="pap-manual">Manual</button>
-        <button id="pap-pausa" disabled>⏸ Pausar</button>
-        <button id="pap-siguiente">→ Siguiente</button>
-        <button id="pap-reiniciar">↺ Reiniciar</button>
-        <button id="pap-cancelar">✕ Cancelar</button>
-        <label class="pap-velocidad-label">
+        <button id="pap-pausa" disabled aria-label="Pausar ejecución">⏸ Pausar</button>
+        <button id="pap-siguiente" aria-label="Ejecutar siguiente paso">→ Siguiente</button>
+        <button id="pap-reiniciar" aria-label="Reiniciar simulación">↺ Reiniciar</button>
+        <button id="pap-cancelar" aria-label="Cancelar y volver al editor">✕ Cancelar</button>
+        <label class="pap-velocidad-label" for="pap-velocidad">
           Vel.
           <input type="range" id="pap-velocidad" min="0" max="6" value="3" disabled />
         </label>
-        <span id="pap-contador">Paso 0</span>
+        <span id="pap-contador" aria-live="polite">Paso 0</span>
       </div>
     </div>
 
@@ -114,7 +127,7 @@ Thread(2){
     <div id="panel-comparar" hidden>
       <div class="cmp-header">
         <h2 class="subtitulo">Comparar 2 ejecuciones — mismo código, mismo scheduler probabilístico, resultados distintos</h2>
-        <button id="cmp-volver">✕ Volver al editor</button>
+        <button id="cmp-volver" aria-label="Volver al editor">✕ Volver al editor</button>
       </div>
       <div id="cmp-cuerpo">
         <div class="cmp-columna" id="cmp-col-a">
