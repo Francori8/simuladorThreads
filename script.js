@@ -1,5 +1,94 @@
 import ejemplos from "./ejemplo.js";
 import { iniciarModoStepByStep, cerrarModoStepByStep } from "./pasoapaso.js";
+import { iniciarTour } from "./tour.js";
+import { generarLinkCompartir, leerCodigoDesdeUrl } from "./compartir.js";
+
+const PASOS_TOUR = [
+  {
+    selector: "#panel-ejemplos",
+    titulo: "Ejemplos",
+    texto: "Elegí un ejemplo predefinido para cargarlo en el editor y entender rápido qué hace el simulador.",
+    posicion: "right",
+  },
+  {
+    selector: "#codigo",
+    titulo: "Editor de código",
+    texto: "Acá escribís el programa concurrente: threads, semáforos, monitores y canales.",
+    posicion: "bottom",
+  },
+  {
+    selector: "#ejecutar",
+    titulo: "Ejecutar",
+    texto: "Corre el programa de una sola vez con un scheduling aleatorio y muestra el resultado.",
+    posicion: "top",
+  },
+  {
+    selector: "#btn-pasoapaso",
+    titulo: "Paso a paso",
+    texto: "Ejecutá el mismo programa instrucción por instrucción para ver cómo se intercalan los threads.",
+    posicion: "top",
+  },
+  {
+    selector: "#btn-comparar",
+    titulo: "Comparar ejecuciones",
+    texto: "Corré el mismo código dos veces con schedulings distintos para ver el no-determinismo en acción.",
+    posicion: "top",
+  },
+  {
+    selector: "#btn-compartir",
+    titulo: "Compartir",
+    texto: "Copia un link que abre el simulador con este mismo código ya cargado, ideal para mandarle un ejemplo a alguien.",
+    posicion: "top",
+  },
+  {
+    selector: "#porcentaje",
+    titulo: "Probabilidad de cambio de thread",
+    texto: "Controla qué tan seguido el scheduler cambia de thread: más interleaving o más ejecución secuencial.",
+    posicion: "bottom",
+  },
+];
+
+const PASOS_TOUR_PASOAPASO = [
+  {
+    selector: "#pap-threads",
+    titulo: "Threads",
+    texto: "Cada tarjeta es un thread. El color del borde indica su estado: preparado, bloqueado, durmiendo o terminado.",
+    posicion: "right",
+  },
+  {
+    selector: "#pap-derecha",
+    titulo: "Traza",
+    texto: "Acá vas viendo, paso por paso, qué instrucción ejecuta cada thread.",
+    posicion: "left",
+  },
+  {
+    selector: "#pap-auto",
+    titulo: "Auto",
+    texto: "Ejecuta automáticamente un paso tras otro. Con 'Manual' en cambio elegís vos qué thread avanza en cada paso.",
+    posicion: "top",
+  },
+  {
+    selector: "#pap-siguiente",
+    titulo: "Siguiente",
+    texto: "Avanza un solo paso a la vez, para seguir la ejecución con detalle.",
+    posicion: "top",
+  },
+];
+
+const PASOS_TOUR_COMPARAR = [
+  {
+    selector: "#cmp-col-a",
+    titulo: "Dos ejecuciones, mismo código",
+    texto: "Cada columna corre el mismo programa con un scheduling probabilístico distinto, para mostrar cómo el resultado puede cambiar entre corridas.",
+    posicion: "right",
+  },
+  {
+    selector: "#cmp-col-a .cmp-reejecutar",
+    titulo: "Reejecutar",
+    texto: "Volvé a correr solo esta columna con un nuevo scheduling, sin tocar la otra.",
+    posicion: "bottom",
+  },
+];
 
 const $ = (arg) => document.querySelector(arg);
 
@@ -29,11 +118,15 @@ function cargar() {
       limiteDeRepeticionesActual(),
       averiguarProbabilidad()
     );
+    tourAlAparecer("#pap-threads .pap-thread-card", PASOS_TOUR_PASOAPASO, "tour-pasoapaso-visto");
   });
   $("#btn-copiar-traza").addEventListener("click", () => {
     navigator.clipboard.writeText(ultimaTrazaTexto);
   });
-  $("#btn-comparar").addEventListener("click", iniciarComparacion);
+  $("#btn-comparar").addEventListener("click", () => {
+    iniciarComparacion();
+    tourAlAparecer("#cmp-col-a .cmp-variables:not(:empty)", PASOS_TOUR_COMPARAR, "tour-comparar-visto");
+  });
   $("#cmp-volver").addEventListener("click", cerrarComparacion);
   $("#cmp-col-a .cmp-reejecutar").addEventListener("click", () => ejecutarEnColumna("#cmp-col-a"));
   $("#cmp-col-b .cmp-reejecutar").addEventListener("click", () => ejecutarEnColumna("#cmp-col-b"));
@@ -45,6 +138,65 @@ function cargar() {
     panelEjemplos.hidden = abierto;
     btnToggle.setAttribute("aria-expanded", String(!abierto));
   });
+
+  $("#btn-tour").addEventListener("click", () => {
+    iniciarTour(PASOS_TOUR, { storageKey: "tour-simulador-visto", forzar: true });
+  });
+
+  const btnCompartir = $("#btn-compartir");
+  const textoOriginalBtnCompartir = btnCompartir.textContent;
+  btnCompartir.addEventListener("click", async () => {
+    const link = await generarLinkCompartir($("#codigo").value);
+    await navigator.clipboard.writeText(link);
+    btnCompartir.textContent = "¡Copiado!";
+    setTimeout(() => { btnCompartir.textContent = textoOriginalBtnCompartir; }, 1500);
+  });
+
+  $("#codigo").addEventListener("input", guardarCodigoEnLocalStorageConDebounce);
+
+  cargarCodigoInicial();
+}
+
+const CLAVE_CODIGO_GUARDADO = "simulador-codigo-guardado";
+let idDebounceGuardado = null;
+
+function guardarCodigoEnLocalStorageConDebounce() {
+  clearTimeout(idDebounceGuardado);
+  idDebounceGuardado = setTimeout(() => {
+    localStorage.setItem(CLAVE_CODIGO_GUARDADO, $("#codigo").value);
+  }, 500);
+}
+
+// Espera a que `selector` aparezca en el DOM (el panel se llena async vía Worker)
+// y recién ahí lanza el tour correspondiente. Se rinde tras 5s por si nunca aparece.
+function tourAlAparecer(selector, pasos, storageKey) {
+  if (localStorage.getItem(storageKey)) return;
+  if (document.querySelector(selector)) {
+    iniciarTour(pasos, { storageKey });
+    return;
+  }
+  const observer = new MutationObserver(() => {
+    if (!document.querySelector(selector)) return;
+    observer.disconnect();
+    iniciarTour(pasos, { storageKey });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  setTimeout(() => observer.disconnect(), 5000);
+}
+
+async function cargarCodigoInicial() {
+  const codigoCompartido = await leerCodigoDesdeUrl();
+  if (codigoCompartido !== null) {
+    $("#codigo").value = codigoCompartido;
+    return; // si vino por link compartido, no interrumpir con el tour
+  }
+
+  const codigoGuardado = localStorage.getItem(CLAVE_CODIGO_GUARDADO);
+  if (codigoGuardado !== null) {
+    $("#codigo").value = codigoGuardado;
+  }
+
+  iniciarTour(PASOS_TOUR, { storageKey: "tour-simulador-visto" });
 }
 
 function modificarTexto(e) {
@@ -53,6 +205,7 @@ function modificarTexto(e) {
     const ej = cat.ejemplos.find(ex => ex.id == idBtn);
     if (ej) {
       $("#codigo").value = ej.texto;
+      localStorage.setItem(CLAVE_CODIGO_GUARDADO, ej.texto);
       return;
     }
   }

@@ -18,6 +18,33 @@
   box-sizing: border-box;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 1000;
+  background: var(--color-azul);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 0 0 var(--radio) 0;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
 body {
   background: var(--color-fondo);
   color: var(--color-texto);
@@ -81,6 +108,24 @@ header {
 }
 
 .btn-toggle-ejemplos:hover {
+  background: #3a3f4b;
+  color: #f5f6fa;
+}
+
+.btn-tour {
+  background: none;
+  color: #a0aec0;
+  border: 1px solid #3a3f4b;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 5px;
+  line-height: 1.2;
+  margin-left: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-tour:hover {
   background: #3a3f4b;
   color: #f5f6fa;
 }
@@ -175,20 +220,41 @@ main[hidden] {
   flex: 1;
   min-width: 100px;
   background: var(--color-verde);
-  color: #fff;
+  color: #16221c;
   border: none;
   border-radius: var(--radio);
   padding: 10px;
   font-size: 0.9rem;
-  font-weight: bold;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
+  transition: background 0.15s;
   margin: 0;
 }
 
 #ejecutar:hover {
-  background: var(--color-azul);
-  transform: translateY(-1px);
+  background: #05c9a0;
+}
+
+/* Botones secundarios de la barra del editor (todo salvo Ejecutar) */
+.btn-secundario {
+  flex: 1;
+  min-width: 100px;
+  background: none;
+  color: #c3cad6;
+  border: 1.5px solid #3a3f4b;
+  border-radius: var(--radio);
+  padding: 9px 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  margin: 0;
+}
+
+.btn-secundario:hover {
+  border-color: #6b7280;
+  color: #f5f6fa;
+  background: #2d323c;
 }
 
 /* ── Panel de error ───────────────────────────────────────────────────── */
@@ -550,62 +616,23 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ── Botón paso a paso ───────────────────────────────────────────────── */
 
-#btn-pasoapaso {
-  flex: 1;
-  min-width: 100px;
-  background: var(--color-violeta);
-  color: #fff;
-  border: none;
-  border-radius: var(--radio);
-  padding: 10px;
-  font-size: 0.9rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-}
-
-#btn-pasoapaso:hover {
-  background: #4f52cc;
-  transform: translateY(-1px);
-}
-
 #cancelar {
   flex: 1;
   min-width: 100px;
-  background: var(--color-rojo);
-  color: #fff;
-  border: none;
+  background: none;
+  color: var(--color-rojo);
+  border: 1.5px solid var(--color-rojo);
   border-radius: var(--radio);
-  padding: 10px;
+  padding: 9px 10px;
   font-size: 0.9rem;
-  font-weight: bold;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.15s, color 0.15s;
 }
 
 #cancelar:hover {
-  background: #c0392b;
-}
-
-/* ── Botón comparar ──────────────────────────────────────────────────── */
-
-#btn-comparar {
-  flex: 1;
-  min-width: 100px;
-  background: var(--color-azul);
+  background: var(--color-rojo);
   color: #fff;
-  border: none;
-  border-radius: var(--radio);
-  padding: 10px;
-  font-size: 0.9rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-}
-
-#btn-comparar:hover {
-  background: #0770c2;
-  transform: translateY(-1px);
 }
 
 /* ── Panel paso a paso ───────────────────────────────────────────────── */
@@ -635,12 +662,14 @@ input[type="range"]::-webkit-slider-thumb {
 
 #pap-controles button {
   padding: 6px 14px;
-  border: none;
+  border: 1.5px solid #3a3f4b;
   border-radius: 6px;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  background: none;
+  color: #c3cad6;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
 
 #pap-controles button:disabled {
@@ -648,19 +677,24 @@ input[type="range"]::-webkit-slider-thumb {
   cursor: default;
 }
 
-#pap-auto      { background: var(--color-verde);   color: #1a1a1a; }
-#pap-manual    { background: #00cec9;              color: #1a1a1a; }
-#pap-pausa     { background: var(--color-amarillo); color: #1a1a1a; }
-#pap-siguiente { background: var(--color-azul);    color: #fff; }
-#pap-reiniciar { background: var(--color-violeta); color: #fff; }
-#pap-cancelar  { background: var(--color-rojo);    color: #fff; }
+/* Auto y Siguiente son las acciones principales del panel: quedan resaltadas */
+#pap-auto, #pap-siguiente {
+  background: var(--color-verde);
+  border-color: var(--color-verde);
+  color: #16221c;
+}
 
-#pap-auto:not(:disabled):hover      { background: #00a381; }
-#pap-manual:not(:disabled):hover    { background: #00b0ab; }
-#pap-pausa:not(:disabled):hover     { background: #e0b050; }
-#pap-siguiente:not(:disabled):hover { background: #0770c2; }
-#pap-reiniciar:not(:disabled):hover { background: #4f52cc; }
-#pap-cancelar:not(:disabled):hover  { background: #c0392b; }
+#pap-manual    { color: #00cec9;              border-color: #00cec9; }
+#pap-pausa     { color: var(--color-amarillo); border-color: var(--color-amarillo); }
+#pap-reiniciar { color: var(--color-violeta);  border-color: var(--color-violeta); }
+#pap-cancelar  { color: var(--color-rojo);     border-color: var(--color-rojo); }
+
+#pap-auto:not(:disabled):hover,
+#pap-siguiente:not(:disabled):hover { background: #05c9a0; }
+#pap-manual:not(:disabled):hover    { background: #00cec91a; }
+#pap-pausa:not(:disabled):hover     { background: #fdcb6e1a; }
+#pap-reiniciar:not(:disabled):hover { background: #6366f11a; }
+#pap-cancelar:not(:disabled):hover  { background: #e170551a; }
 
 /* Tarjeta elegible en modo manual */
 .pap-thread-elegible {
@@ -951,19 +985,10 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 #cmp-volver {
-  flex-shrink: 0;
-  background: var(--color-rojo);
-  color: #fff;
-  border: none;
-  border-radius: var(--radio);
+  flex: 0 0 auto;
+  min-width: 0;
   padding: 6px 14px;
   font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-#cmp-volver:hover {
-  background: #c0392b;
 }
 
 #cmp-cuerpo {
