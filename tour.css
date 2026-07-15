@@ -1,0 +1,87 @@
+/* Estilos del tour guiado genérico (tour.js). Copiar junto a tour.js para reutilizar. */
+
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.tour-overlay-hueco {
+  position: fixed;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
+  pointer-events: none;
+}
+
+.tour-overlay-tooltip {
+  position: fixed;
+  max-width: 320px;
+  background: #1a1d23;
+  color: #f0f0f0;
+  border: 1px solid #3a3f4b;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.tour-overlay-titulo {
+  font-weight: 700;
+  margin-bottom: 6px;
+  font-size: 1rem;
+}
+
+.tour-overlay-texto {
+  margin-bottom: 12px;
+  color: #d0d3da;
+}
+
+.tour-overlay-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tour-overlay-contador {
+  font-size: 0.8rem;
+  color: #9aa0ac;
+  white-space: nowrap;
+}
+
+.tour-overlay-botones {
+  display: flex;
+  gap: 6px;
+}
+
+.tour-overlay-botones button {
+  cursor: pointer;
+  border: 1px solid #3a3f4b;
+  background: #23262e;
+  color: #f0f0f0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.tour-overlay-botones button:hover:not(:disabled) {
+  background: #2d313b;
+}
+
+.tour-overlay-botones button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tour-overlay-siguiente {
+  background: #3a7bd5 !important;
+  border-color: #3a7bd5 !important;
+}
+
+.tour-overlay-siguiente:hover {
+  background: #3369b8 !important;
+}

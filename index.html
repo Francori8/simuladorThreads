@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Simulador educativo de threads: escribí código concurrente con hilos, semáforos, monitores y canales, y visualizá paso a paso el scheduling y las condiciones de carrera en el navegador." />
     <meta name="theme-color" content="#1a1d23" />
-    <link rel="canonical" href="https://francori8.github.io/simuladorThreads/" />
+    <link rel="canonical" href="https://simuladorthreads.francoorizonte.com/" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://francori8.github.io/simuladorThreads/" />
+    <meta property="og:url" content="https://simuladorthreads.francoorizonte.com/" />
     <meta property="og:title" content="Simulador de Threads" />
     <meta property="og:description" content="Simulador educativo de threads: escribí código concurrente y visualizá paso a paso el scheduling, semáforos, monitores y canales." />
     <meta name="twitter:card" content="summary" />
@@ -16,6 +16,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚦</text></svg>">
     <title>Simulador de Threads — visualizador de concurrencia paso a paso</title>
     <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./tour.css" />
   </head>
   <body>
     <a href="#contenedorDeTexto" class="skip-link">Saltar al editor de código</a>
@@ -24,6 +25,7 @@
         <div class="header-izq">
           <button id="btn-toggle-ejemplos" class="btn-toggle-ejemplos" aria-expanded="true" aria-label="Mostrar u ocultar panel de ejemplos" title="Mostrar/ocultar ejemplos">☰</button>
           <h1>Simulador de Threads</h1>
+          <button id="btn-tour" class="btn-tour" title="Ver una guía rápida de la página" aria-label="Iniciar tour guiado">Guía</button>
         </div>
         <div class="header-controles">
           <label class="config-label" for="porcentaje" title="Controla qué tan seguido el scheduler cambia de thread. En 0 tiende a dejar correr el mismo thread (más secuencial); al máximo cambia de thread con más frecuencia (más interleaving).">Probabilidad ⓘ</label>

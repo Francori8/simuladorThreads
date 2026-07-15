@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://francori8.github.io/simuladorThreads/sitemap.xml
+Sitemap: https://simuladorthreads.francoorizonte.com/sitemap.xml

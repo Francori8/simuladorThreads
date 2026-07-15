@@ -112,6 +112,24 @@ header {
   color: #f5f6fa;
 }
 
+.btn-tour {
+  background: none;
+  color: #a0aec0;
+  border: 1px solid #3a3f4b;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 5px;
+  line-height: 1.2;
+  margin-left: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-tour:hover {
+  background: #3a3f4b;
+  color: #f5f6fa;
+}
+
 .config-label {
   font-size: 0.7rem;
   font-weight: 700;

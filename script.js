@@ -1,5 +1,45 @@
 import ejemplos from "./ejemplo.js";
 import { iniciarModoStepByStep, cerrarModoStepByStep } from "./pasoapaso.js";
+import { iniciarTour } from "./tour.js";
+
+const PASOS_TOUR = [
+  {
+    selector: "#panel-ejemplos",
+    titulo: "Ejemplos",
+    texto: "Elegí un ejemplo predefinido para cargarlo en el editor y entender rápido qué hace el simulador.",
+    posicion: "right",
+  },
+  {
+    selector: "#codigo",
+    titulo: "Editor de código",
+    texto: "Acá escribís el programa concurrente: threads, semáforos, monitores y canales.",
+    posicion: "bottom",
+  },
+  {
+    selector: "#ejecutar",
+    titulo: "Ejecutar",
+    texto: "Corre el programa de una sola vez con un scheduling aleatorio y muestra el resultado.",
+    posicion: "top",
+  },
+  {
+    selector: "#btn-pasoapaso",
+    titulo: "Paso a paso",
+    texto: "Ejecutá el mismo programa instrucción por instrucción para ver cómo se intercalan los threads.",
+    posicion: "top",
+  },
+  {
+    selector: "#btn-comparar",
+    titulo: "Comparar ejecuciones",
+    texto: "Corré el mismo código dos veces con schedulings distintos para ver el no-determinismo en acción.",
+    posicion: "top",
+  },
+  {
+    selector: "#porcentaje",
+    titulo: "Probabilidad de cambio de thread",
+    texto: "Controla qué tan seguido el scheduler cambia de thread: más interleaving o más ejecución secuencial.",
+    posicion: "bottom",
+  },
+];
 
 const $ = (arg) => document.querySelector(arg);
 
@@ -45,6 +85,11 @@ function cargar() {
     panelEjemplos.hidden = abierto;
     btnToggle.setAttribute("aria-expanded", String(!abierto));
   });
+
+  $("#btn-tour").addEventListener("click", () => {
+    iniciarTour(PASOS_TOUR, { storageKey: "tour-simulador-visto", forzar: true });
+  });
+  iniciarTour(PASOS_TOUR, { storageKey: "tour-simulador-visto" });
 }
 
 function modificarTexto(e) {
