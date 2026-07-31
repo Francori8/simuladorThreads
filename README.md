@@ -316,6 +316,42 @@ Ejemplos de deadlock están en la categoría **Errores**:
 - [x] **Representación de objetos en variables/traza** — `Instancia.toString()` (`clase.js`) e `InstanciaMonitor.toString()` (`monitor.js`) ahora muestran los atributos internos (ej. `Contador(valor: 3)`) en vez de `[Contador]`, usando un helper común `formatearAtributos()` (`memoria.js`) con protección de recursión consistente entre ambas clases
 - [ ] ~~Resaltar en el editor la línea correspondiente al pasar el mouse sobre un paso de la traza~~ — **descartado por ahora**. Investigado: el parser no propaga número de línea a las instrucciones hoy, pero sería viable agregarlo asignando `instr.linea` después de cada `new` en `parser.js` (sin tocar las ~55 clases de `instrucciones.js`). Se descarta igual porque el beneficio pedagógico es marginal (el alumno ya ve la instrucción como texto en la traza) frente al costo: tocar ~55 puntos del parser y resolver qué pasa si el código se edita después de ejecutar (la línea quedaría desincronizada)
 
+### Model checking — modo "Verificar" (plan, no implementado)
+
+Idea: agregar un tercer modo de ejecución (junto a "Ejecutar" y "Paso a paso") que en vez de correr **un** entrelazado al azar (como hace hoy el scheduler probabilístico), **explora exhaustivamente todos los entrelazados posibles** de las instrucciones y reporta si alguno lleva a deadlock o si distintas variables globales pueden terminar con valores distintos según el orden — evidenciando race conditions sin que el usuario tenga que predecir nada de antemano.
+
+Decisión de diseño clave: **no agregar `assert` ni ninguna instrucción nueva al pseudocódigo**. Mezclar la propiedad a verificar con el algoritmo que se está modelando iría contra el espíritu del simulador (foco en concurrencia, no en programar tests). El explorador reporta automáticamente, sin configuración del usuario:
+1. **Deadlocks** — ¿existe algún camino que termine en deadlock? Si sí, guarda la secuencia exacta para poder cargarla en el visor de traza existente.
+2. **Rango de valores finales de cada variable global** — el conjunto de valores distintos observados al final de la ejecución, across todos los caminos explorados, con frecuencia de cada uno (ej. "`contador` terminó en 2 el 77% de los caminos, en 1 el 23%").
+
+#### Motor de exploración
+
+`Memoria.clonar()` (`memoria.js`) hoy hace **shallow clone** — comparte referencias a `Instancia`, `Semaphore`, `Canal` entre el original y la copia. Eso es correcto **a propósito** para el caso que ya existe hoy: threads dinámicos lanzados dentro de un proceso (`lanzarHiloHijo` en `estadoGlobal.js`) necesitan ver el mismo canal/semáforo/instancia que su padre — comparten el objeto de verdad, no una copia. No hay que tocar `clonar()` ni ese mecanismo.
+
+El problema del explorador es distinto y no debe resolverse con el mismo método: si dos ramas hipotéticas del árbol de exploración (ej. "elegir Thread1 primero" vs. "elegir Thread2 primero") comparten la misma instancia mutable de `Semaphore`/`Canal`, lo que muta la rama A contamina el punto de partida de la rama B — se pierde el aislamiento entre ramas. Extender o reusar `clonar()` para esto arriesgaría además romper por descuido el caso 1 si en algún momento se comparte código entre ambos mecanismos.
+
+Por eso el enfoque elegido es **DFS por re-ejecución determinística**, sin clonar nada: para explorar una rama hermana, se re-parsea el código desde cero (barato, ya lo hace cada `iniciar()`) y se re-ejecuta el generador `decidirQuienSigueGen()` (`estadoGlobal.js`) forzando la secuencia de `threadIdForzado` que lleva a ese punto, más una elección nueva al final. Más costoso en CPU que clonar estado, pero mucho más seguro y no interfiere con el clonado existente.
+
+Si en el futuro la re-ejecución resulta demasiado lenta y hace falta clonado real para acelerar el explorador, ese debería ser un método **nuevo y separado** (ej. `clonarProfundo()`), usado *solo* por `explorador.js` — nunca una modificación de `clonar()`, para no arriesgar el comportamiento ya validado de threads dinámicos.
+
+**Poda esencial**: solo bifurcar en puntos donde `threadPreparados().length > 1`. Si hay un solo thread preparado, no hay elección real — seguir derecho sin gastar una rama. Reduce el árbol drásticamente en los ejemplos típicos de la materia.
+
+**Límites duros**: `maxCaminos` y `maxProfundidad` configurables, con aviso explícito en el resultado si la exploración se truncó (no es garantía exhaustiva) — mismo espíritu que `limiteRepeticiones` ya existente para loops.
+
+Poda futura (opcional, evaluar según performance real): **partial-order reduction** — si dos instrucciones consecutivas de threads distintos no tocan la misma variable global / semáforo / canal, el orden entre ellas no cambia el resultado, evitar bifurcar ahí. Requiere que cada instrucción exponga qué variables toca (lectura/escritura), metadato que no existe hoy en `instrucciones.js`.
+
+#### Arquitectura propuesta
+
+- `explorador.js` (nuevo) — motor puro sin DOM, mismo espíritu que `simulador.js`. Expone `explorar({ maxCaminos, maxProfundidad })` → `{ caminosExplorados, truncado, deadlocks: [...], valoresFinales: {...} }`.
+- `explorador.worker.js` (nuevo) — mismo patrón que `simulador.worker.js`, corre la exploración en background y reporta progreso.
+- UI (`script.js`, `index.html`): botón "Verificar". Resultado tipo "✅ 1.240 caminos, sin deadlock, `contador` siempre en 2" o "⚠️ `contador` varía: 1 (23%), 2 (77%)" o "❌ deadlock en 4/1.240 caminos" — con botón para cargar el camino específico (deadlock o valor particular) en el visor de traza / paso a paso existente.
+
+#### Orden de implementación sugerido
+
+1. `explorador.js` con DFS + poda de bifurcación única + límites duros. Probar aislado (sin worker/UI) contra ejemplos ya existentes: uno con race condition conocida, uno con deadlock conocido, uno correcto — validar que el resultado es el esperado antes de seguir.
+2. `explorador.worker.js` + UI mínima (botón, resultado en texto).
+3. UI: cargar la traza de un camino específico (deadlock o valor particular) en el visor existente.
+
 ### Fixes de code review (sesión de code-review high sobre el diff de mejoras educativas)
 
 - [x] **Historial de variables con snapshot inmutable** — si una variable global es un objeto de clase (`Instancia`) que se muta luego vía métodos, el historial ahora guarda `valor.toString()` en el momento de la escritura (`hilos.js:escribir`), en vez de la referencia viva — antes todas las entradas pasadas del toggle mostraban el estado *final* mutado, no el histórico real
