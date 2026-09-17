@@ -7,6 +7,7 @@ export class Semaphore {
 
   // Intenta adquirir un permiso. Retorna true si ok, false si el hilo queda bloqueado.
   acquire(hilo, instruccionAcquire) {
+    hilo.dependencias.registrar("obj", this);
     if (this.contador > 0) {
       this.contador--;
       hilo.informar("Semáforo", `acquire → permisos restantes: ${this.contador}`);
@@ -24,6 +25,7 @@ export class Semaphore {
 
   // Libera un permiso. Si hay threads esperando, hand-off directo.
   release(hiloLlamador) {
+    hiloLlamador.dependencias.registrar("obj", this);
     const cantEsperando = this.fuerte ? this.esperando.length : this.esperando.size;
     if (cantEsperando > 0) {
       // Hand-off: el permiso va directo al siguiente thread sin incrementar el contador

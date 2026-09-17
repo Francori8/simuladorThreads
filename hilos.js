@@ -4,6 +4,7 @@ import { Semaphore } from "./semaforo.js";
 import { ErrorSimulador } from "./errores.js";
 import { Instancia } from "./clase.js";
 import { InstanciaMonitor } from "./monitor.js";
+import RegistroDependencias from "./dependencias.js";
 
 function esSemaforo(valor) {
   return valor instanceof Semaphore || Array.isArray(valor) && valor[0] instanceof Semaphore;
@@ -27,6 +28,10 @@ export default class Hilo {
     this.funciones = funciones; // tabla nombre -> { params, instrucciones }
     this.clases    = clases;   // tabla nombre -> Clase (instancias frescas por hilo)
     this.monitores = monitores; // tabla nombre -> Monitor (instancias frescas por hilo)
+    // Observador externo usado por el Explorador (ver README, "Model
+    // checking") para decidir qué elecciones de scheduler son independientes.
+    // No participa de la ejecución del pseudocódigo.
+    this.dependencias = new RegistroDependencias();
   }
 
   // Crea un hilo hijo que hereda el contexto del proceso padre:
@@ -118,6 +123,7 @@ export default class Hilo {
   // --- Versión generador para modo paso a paso ---
 
   *ejecutarSiguienteInstruccionGen() {
+    this.dependencias.reiniciarPaso();
     if (!this.proximaInstruccion.estaResuelto()) {
       this.proximaInstruccion.resolver(this);
     }
@@ -235,6 +241,10 @@ export default class Hilo {
     }
     if (!esSemaforo(valor)) {
       this.informar("Lectura", `${scope}.${nombre} : ${valor}`);
+      // Un semáforo (o array de semáforos) se trackea por identidad de objeto
+      // en Semaphore.acquire()/release(), no acá — leer la referencia en sí no
+      // es una operación observable entre threads, solo lo es acquire/release.
+      if (scope === "global") this.dependencias.registrar("var", nombre);
     }
     return valor;
   }
@@ -260,6 +270,7 @@ export default class Hilo {
           ? valor.toString()
           : valor;
         this.informar("Escritura", `global.${nombre} : ${valor}`, { scope: "global", nombre, valor: valorHistorial });
+        this.dependencias.registrar("var", nombre);
         this.memoriaCompartida.agregarVariable(nombre, valor);
       } else {
         this.memoriaLocal.agregarVariable(nombre, valor);
@@ -399,6 +410,10 @@ export default class Hilo {
     const valor = arr[indice];
     if (!esSemaforo(valor)) {
       this.informar("Lectura[]", `${nombre}[${indice}] : ${valor}`);
+      // Solo si el array vive en memoria global: local es propio del thread,
+      // no observable por otros. Los semáforos se trackean aparte por
+      // identidad de objeto en Semaphore.acquire()/release().
+      if (this.memoriaCompartida.hayVariable(nombre)) this.dependencias.registrar("var", `${nombre}[${indice}]`);
     }
     return valor;
   }
@@ -408,6 +423,7 @@ export default class Hilo {
       const arr = [...this.memoriaCompartida.verValor(nombre)];
       arr[indice] = valor;
       this.informar("Escritura[]", `global.${nombre}[${indice}] : ${valor}`);
+      this.dependencias.registrar("var", `${nombre}[${indice}]`);
       this.memoriaCompartida.agregarVariable(nombre, arr);
     } else {
       const arr = [...this.memoriaLocal.verValor(nombre)];

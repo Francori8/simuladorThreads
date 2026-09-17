@@ -261,7 +261,8 @@ main[hidden] {
 
 #panel-error,
 .panel-error--error,
-.panel-error--aviso {
+.panel-error--aviso,
+.panel-error--ok {
   padding: 10px 14px;
   border-radius: var(--radio);
   font-family: "Fira Mono", monospace;
@@ -280,6 +281,12 @@ main[hidden] {
   background: #2d2510;
   border-left: 4px solid var(--color-amarillo);
   color: var(--color-amarillo);
+}
+
+.panel-error--ok {
+  background: #14261c;
+  border-left: 4px solid var(--color-verde);
+  color: #6ee7a7;
 }
 
 /* ── Visual ──────────────────────────────────────────────────────────── */

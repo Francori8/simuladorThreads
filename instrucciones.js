@@ -1225,7 +1225,7 @@ export class Notify extends Instruccion {
     const vc          = this.condicionExpr.resolverPuro();
     const instMonitor = hilo.getMonitorActivo();
     hilo.informar("Notify", `notificando condición`);
-    vc.notificarUno(instMonitor);
+    vc.notificarUno(instMonitor, hilo);
     this.resuelto = true;
   }
 
@@ -1252,7 +1252,7 @@ export class NotifyAll extends Instruccion {
     const vc          = this.condicionExpr.resolverPuro();
     const instMonitor = hilo.getMonitorActivo();
     hilo.informar("NotifyAll", `notificando todos`);
-    vc.notificarTodos(instMonitor);
+    vc.notificarTodos(instMonitor, hilo);
     this.resuelto = true;
   }
 
