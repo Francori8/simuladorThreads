@@ -68,22 +68,32 @@ Thread(2){
       </section>
 
       <section id="visual">
+        <div id="panel-vistas-switch" role="group" aria-label="Elegir qué paneles mostrar">
+          <input type="checkbox" id="chk-vista-variables" checked />
+          <label for="chk-vista-variables">Variables</label>
+          <input type="checkbox" id="chk-vista-consola" checked />
+          <label for="chk-vista-consola">Consola</label>
+          <input type="checkbox" id="chk-vista-traza" checked />
+          <label for="chk-vista-traza">Traza</label>
+        </div>
         <div id="panel-traza">
           <div id="panel-salida">
-            <div class="seccionEscrita">
+            <div class="seccionEscrita" id="seccion-variables">
               <h2 class="subtitulo">Variables globales</h2>
               <div id="variables"></div>
             </div>
-            <div class="seccionEscrita">
+            <div class="seccionEscrita" id="seccion-consola">
               <h2 class="subtitulo">Consola</h2>
               <div id="consola"></div>
             </div>
           </div>
-          <div class="subtitulo-fila">
-            <h2 class="subtitulo">Traza de Ejecución</h2>
-            <button id="btn-copiar-traza" hidden>Copiar</button>
+          <div id="seccion-traza">
+            <div class="subtitulo-fila">
+              <h2 class="subtitulo">Traza de Ejecución</h2>
+              <button id="btn-copiar-traza" hidden>Copiar</button>
+            </div>
+            <div id="traza"></div>
           </div>
-          <div id="traza"></div>
         </div>
 
       </section>

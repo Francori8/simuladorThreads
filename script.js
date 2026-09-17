@@ -131,6 +131,25 @@ function cargar() {
   $("#cmp-col-a .cmp-reejecutar").addEventListener("click", () => ejecutarEnColumna("#cmp-col-a"));
   $("#cmp-col-b .cmp-reejecutar").addEventListener("click", () => ejecutarEnColumna("#cmp-col-b"));
 
+  const vistas = [
+    { chk: $("#chk-vista-variables"), seccion: $("#seccion-variables") },
+    { chk: $("#chk-vista-consola"),   seccion: $("#seccion-consola") },
+    { chk: $("#chk-vista-traza"),     seccion: $("#seccion-traza") },
+  ];
+  const panelSalida = $("#panel-salida");
+  function actualizarVistas() {
+    for (const { chk, seccion } of vistas) {
+      seccion.hidden = !chk.checked;
+    }
+    const variablesOcultas = $("#chk-vista-variables").checked === false;
+    const consolaOculta = $("#chk-vista-consola").checked === false;
+    panelSalida.classList.toggle("oculto-todo", variablesOcultas && consolaOculta);
+  }
+  for (const { chk } of vistas) {
+    chk.addEventListener("change", actualizarVistas);
+  }
+  actualizarVistas();
+
   const btnToggle = $("#btn-toggle-ejemplos");
   const panelEjemplos = $("#panel-ejemplos");
   btnToggle.addEventListener("click", () => {
