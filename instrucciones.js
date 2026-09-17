@@ -628,6 +628,17 @@ export class GetId extends Instruccion {
   toString() { return `getId()`; }
 }
 
+export class GetIndex extends Instruccion {
+  resolver(hilo) {
+    this.resultado = hilo.getIndex();
+    hilo.informar("GetIndex", `indice = ${this.resultado}`);
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `getIndex()`; }
+}
+
 export class Desigualdad extends OperacionLogica {
   operar(a, b) { return a != b; }
   get simbolo() { return "!="; }

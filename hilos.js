@@ -10,8 +10,9 @@ function esSemaforo(valor) {
 }
 
 export default class Hilo {
-  constructor(id, cache, memoriaCompartida, bloque, funciones = {}, nombre = null, clases = {}, monitores = {}) {
+  constructor(id, cache, memoriaCompartida, bloque, funciones = {}, nombre = null, clases = {}, monitores = {}, indice = null) {
     this.id = id;
+    this.indice = indice;
     this.nombre = nombre ?? `Thread-${id}`;
     this.memoriaLocal = cache;
     this.memoriaCompartida = memoriaCompartida;
@@ -362,6 +363,8 @@ export default class Hilo {
   }
 
   getId() { return this.id; }
+
+  getIndex() { return this.indice; }
 
   leerIndexado(nombre, indice) {
     let arr;
