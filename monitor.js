@@ -19,19 +19,24 @@ export class VariableCondicion {
 
   // El thread se encola y queda bloqueado
   encolar(hilo, instruccionWait) {
+    hilo.dependencias.registrar("obj", this);
     this.cola.push({ hilo, instruccionWait });
     hilo.bloquearEnCondicion(instruccionWait);
   }
 
   // Desencola el primero y lo pone a competir por el lock del monitor
-  notificarUno(instanciaMonitor) {
+  // `hiloLlamador`: quien ejecuta notify() — es quien tocó esta variable de
+  // condición en este paso; el hilo desencolado la toca recién en el suyo.
+  notificarUno(instanciaMonitor, hiloLlamador) {
+    hiloLlamador.dependencias.registrar("obj", this);
     if (this.cola.length === 0) return;
     const { hilo, instruccionWait } = this.cola.shift();
     instanciaMonitor.competirPorLock(hilo, instruccionWait);
   }
 
   // Desencola todos y los pone a competir por el lock
-  notificarTodos(instanciaMonitor) {
+  notificarTodos(instanciaMonitor, hiloLlamador) {
+    hiloLlamador.dependencias.registrar("obj", this);
     while (this.cola.length > 0) {
       const { hilo, instruccionWait } = this.cola.shift();
       instanciaMonitor.competirPorLock(hilo, instruccionWait);
@@ -112,6 +117,7 @@ export class InstanciaMonitor {
   // Si el mismo hilo ya lo tiene (re-entrada), incrementa profundidad y devuelve true.
   // Si está ocupado por otro, encola el thread y devuelve false.
   intentarTomarLock(hilo, instruccionEntrada) {
+    hilo.dependencias.registrar("obj", this);
     if (this.lock === null) {
       this.lock = hilo;
       this.profundidad = 1;
@@ -132,6 +138,7 @@ export class InstanciaMonitor {
 
   // Libera un nivel de re-entrada. Solo suelta el lock cuando profundidad llega a 0.
   liberarLock(hilo) {
+    hilo.dependencias.registrar("obj", this);
     if (this.lock !== hilo) return; // seguridad
     this.profundidad--;
     if (this.profundidad > 0) {

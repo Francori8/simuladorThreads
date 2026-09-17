@@ -336,9 +336,29 @@ Si en el futuro la re-ejecución resulta demasiado lenta y hace falta clonado re
 
 **Poda esencial**: solo bifurcar en puntos donde `threadPreparados().length > 1`. Si hay un solo thread preparado, no hay elección real — seguir derecho sin gastar una rama. Reduce el árbol drásticamente en los ejemplos típicos de la materia.
 
-**Límites duros**: `maxCaminos` y `maxProfundidad` configurables, con aviso explícito en el resultado si la exploración se truncó (no es garantía exhaustiva) — mismo espíritu que `limiteRepeticiones` ya existente para loops.
+**Poda por sleep-set / partial-order reduction (implementada)**: `explorador.js` trackea qué recursos compartidos (variables globales, o semáforos/canales/monitores por identidad de objeto) toca cada instrucción, vía un colaborador `RegistroDependencias` (`dependencias.js`) que cada `Hilo` hospeda (`hilo.dependencias`). Se instrumentaron los puntos ya centralizados de acceso a memoria compartida — `hilo.leer()`/`escribir()`/`leerIndexado()`/`escribirIndexado()` en `hilos.js`, `Semaphore.acquire()`/`release()` en `semaforo.js`, `Canal.send()`/`receive()` en `canal.js`, `InstanciaMonitor.intentarTomarLock()`/`liberarLock()` y `VariableCondicion.encolar()`/`notificarUno()`/`notificarTodos()` en `monitor.js` — sin tocar ninguna de las ~58 clases de `instrucciones.js` (salvo 2 líneas mecánicas en `Notify`/`NotifyAll` para pasar `hilo` a la nueva firma de `notificarUno/Todos`).
 
-Poda futura (opcional, evaluar según performance real): **partial-order reduction** — si dos instrucciones consecutivas de threads distintos no tocan la misma variable global / semáforo / canal, el orden entre ellas no cambia el resultado, evitar bifurcar ahí. Requiere que cada instrucción exponga qué variables toca (lectura/escritura), metadato que no existe hoy en `instrucciones.js`.
+En cada bifurcación con candidatos `[c0, c1, ..., cn]`, `#candidatosRelevantes` sondea el **footprint completo** de cada candidato (todos los recursos que toca hasta bloquearse o terminar su bloque — no alcanza con mirar el primer paso ni el primer recurso, ver hallazgos abajo) y aplica la regla de ample-set: siempre se explora `c0`; un `ci` posterior solo se explora también si es *dependiente* de `c0` (comparte algún recurso). Si son independientes, ejecutar `c0` primero y `ci` después da el mismo estado que al revés, así que postergar `ci` no pierde ningún camino real.
+
+**Detalle crítico de implementación**: cada sondeo de un candidato tiene que correr sobre el **mismo parseo/generador** que el sondeo de los demás candidatos de esa bifurcación (`#avanzarHasta` + `#sondearFootprint` compartiendo `estadoGlobal`) — si cada uno se sondeara en su propio `parsear()` independiente (como en un primer intento), los objetos `Semaphore`/`Canal`/`Monitor` de cada sondeo serían instancias distintas en memoria aunque representen "la misma" variable global del programa, y la comparación por identidad de referencia nunca coincidiría (bug real que se dio, corregido).
+
+**Resultados medidos** (antes → después de la poda, mismo hardware):
+- Mutex con 2 threads (`acquire`/`incremento`/`release`): 9.020 → 543 caminos, sigue sin falsos positivos (`contador` siempre 2).
+- Deadlock cruzado de 2 semáforos (T1 toma a→b, T2 toma b→a): 3.320 → 230 caminos, sigue encontrando el deadlock (14 caminos).
+- Mismo orden (sin deadlock posible): sigue en 0 deadlocks reportados en la muestra.
+
+**Limitación medida y diagnosticada (no resuelta)**: con "Filósofos" (5 threads, array de semáforos indexado en runtime), la exploración no completa en tiempo razonable. Diagnóstico (sesión de 2026-08-01, aislando variables una por una):
+- **No es** un problema de la poda en sí — el ratio de parseos por camino explorado es idéntico (5.0) con o sin instrucciones locales extra antes del `acquire()`. La poda decide correctamente qué bifurcar en ambos casos.
+- **Sí hay** un costo real por instrucción local adicional dentro del bloque de cada thread: agregar una sola `local Int izq = 0` (sin siquiera usarla como índice de array) triplica el tiempo total para explorar el mismo número de caminos (1541ms vs 501ms para 3.000 caminos, mismo hardware) — es puro overhead de re-parsear y re-ejecutar un programa más largo, multiplicado por cada nodo sondeado del árbol.
+- **Conclusión**: no es un bug puntual arreglable con un fix chico. Es un límite estructural del enfoque elegido (sondeo por re-parseo completo en cada nodo, en vez de clonado de estado — ver la sección de arriba sobre por qué se evitó el clonado) que escala mal cuando se combinan más threads **y** más instrucciones locales por thread, que es exactamente el perfil de "Filósofos". Resolverlo de raíz requeriría optimizar el propio motor de sondeo (cachear resultados entre nodos hermanos, o revisar la decisión de evitar clonado de estado) — trabajo de una magnitud comparable a la ya invertida en esta poda, no una corrección menor.
+
+Se decidió (2026-08-01) no perseguir esa optimización de fondo y avanzar a la Etapa 3 con el explorador tal como está: útil y verificado para el caso central de la materia (2 threads: mutex, race conditions, deadlock cruzado).
+
+**Hallazgo adicional y corrección aplicada (2026-08-01, tras subir `maxCaminos` a 100.000 con progreso visible en la UI)**: con 2 filósofos, 20.000 caminos completos **no encontraban el deadlock conocido** — no por falta de caminos, sino porque el DFS es determinista: en cada bifurcación recorre siempre los mismos candidatos en el mismo orden (`idsPreparados` tal cual los expone `threadPreparados()`). Se confirmó a mano (forzando una secuencia específica con `ejecutarSecuencia`) que el deadlock **sí existe** en el árbol, pero el subárbol de "el primer thread en el orden natural siempre gana cada micro-decisión" es tan grande que agota cualquier `maxCaminos` razonable antes de que el DFS llegue a explorar variantes donde otro thread se adelanta.
+
+**Fix aplicado**: `Explorador.#barajar()` (Fisher-Yates) aleatoriza el orden de `idsPreparados` en cada bifurcación antes de pasarlo a `#candidatosRelevantes` — no cambia la corrección (sigue siendo exhaustivo si no hay límite) pero da cobertura mucho más pareja del espacio de caminos dentro de un `maxCaminos` finito. **Resultado medido**: 2 filósofos, 20.000 caminos → pasó de 0 a 5 deadlocks encontrados. Efecto secundario esperado: al igual que el modo "Ejecutar" normal (que también usa sorteo), corridas sucesivas de "Verificar" sobre un resultado truncado pueden variar entre sí — solo importa cuando `truncado: true`; una exploración completa sigue dando el mismo resultado siempre (agotó todo el árbol, el orden de recorrido no cambia qué existe).
+
+**Sigue sin resolver**: 5 filósofos (el ejemplo real del catálogo) continúa sin encontrar el deadlock incluso con la aleatorización — medido: ~7ms/camino, 2.000 caminos en 14s sin encontrarlo. A diferencia del caso de 2 threads, acá no parece ser sesgo del orden de recorrido sino pura combinatoria: con 5 threads compitiendo en anillo, la fracción de entrelazados que produce el ciclo completo de espera circular es mucho menor que con 2, así que hace falta explorar muchos más caminos (aun al azar) para tropezar con uno. No se investigó cuántos harían falta en la práctica.
 
 #### Arquitectura propuesta
 
@@ -346,11 +366,37 @@ Poda futura (opcional, evaluar según performance real): **partial-order reducti
 - `explorador.worker.js` (nuevo) — mismo patrón que `simulador.worker.js`, corre la exploración en background y reporta progreso.
 - UI (`script.js`, `index.html`): botón "Verificar". Resultado tipo "✅ 1.240 caminos, sin deadlock, `contador` siempre en 2" o "⚠️ `contador` varía: 1 (23%), 2 (77%)" o "❌ deadlock en 4/1.240 caminos" — con botón para cargar el camino específico (deadlock o valor particular) en el visor de traza / paso a paso existente.
 
-#### Orden de implementación sugerido
+#### Plan de trabajo (tareas chicas y verificables)
 
-1. `explorador.js` con DFS + poda de bifurcación única + límites duros. Probar aislado (sin worker/UI) contra ejemplos ya existentes: uno con race condition conocida, uno con deadlock conocido, uno correcto — validar que el resultado es el esperado antes de seguir.
-2. `explorador.worker.js` + UI mínima (botón, resultado en texto).
-3. UI: cargar la traza de un camino específico (deadlock o valor particular) en el visor existente.
+**Etapa 1 — motor puro, sin worker ni UI**
+
+1. [x] `explorador.js`: `Explorador.ejecutarSecuencia(secuencia)` re-parsea y re-ejecuta forzando `threadIdForzado` en modo manual (sin sorteo — determinista). Validado con test de determinismo entre corridas repetidas.
+2. [x] Bifurcación real: `ejecutarSecuencia(secuencia, { detenerEnBifurcacion })` corta apenas hay más de un thread preparado sin resolver por la secuencia forzada, y `explorar()` recursa una vez por cada elección (`explorarDesde`).
+3. [x] `maxCaminos` / `maxProfundidad` con corte y flag `truncado` (default `maxCaminos: 100000` — subido desde 20.000 una vez agregado el reporte de progreso en vivo en la UI, que hace aceptable que casos grandes tarden más si el usuario puede ver que avanza y cancelar cuando quiera; ver nota de performance arriba).
+4. [x] Captura de deadlock por rama: `ejecutarSecuencia` atrapa la excepción de `informarDeadlock()` y la devuelve como dato (`deadlock: mensaje`) en vez de propagarla — el DFS sigue con las demás ramas.
+5. [x] Reporte de valores finales por variable global: `valoresPorVariable` acumula, por nombre de variable, un `Map<valor, cantidadDeCaminos>`.
+6. [x] Poda de "no bifurcar con 1 solo preparado" — natural del punto 2 (`threadPreparados().length > 1` es la condición de bifurcación). Además se sumó la poda de bloqueo inmediato (`#candidatosRelevantes`, ver arriba).
+
+**Etapa 2 — tests de validación** (`tests/explorador.test.js`) — **completada con alcance ajustado**, 10 tests, todos en verde junto con la suite existente (35 tests totales, `npm test`, ~2.5s):
+
+- [x] Determinismo de `ejecutarSecuencia([])` entre corridas repetidas.
+- [x] Forzar secuencias distintas cambia el resultado de forma predecible (pérdida de escritura vs. ejecución secuencial completa).
+- [x] Deadlock clásico de semáforos cruzados se detecta sin reventar la ejecución (a nivel `ejecutarSecuencia`).
+- [x] `explorar()` sobre el texto **real** del ejemplo `b2` de `ejemplo.js` (race condition, 2 threads incrementando sin lock): reporta ambos valores finales posibles para `n` (`1` y `2`).
+- [x] `explorar()` sobre mutex con 2 threads: reporta un único valor final (`2`) en los 543 caminos podados — prueba negativa, sin falsos positivos.
+- [x] `explorar()` sobre deadlock cruzado de semáforos: encuentra deadlocks (14 de 230 caminos) sin abortar el resto del árbol.
+- [x] `explorar()` sobre el mismo caso pero con ambos threads tomando los semáforos en el mismo orden: cero deadlocks — prueba negativa de falsos positivos de deadlock.
+- [x] `maxCaminos` bajo a propósito: `truncado: true` se reporta correctamente.
+
+**No cubierto, y no se va a cubrir sin más trabajo**: los ejemplos reales de "Filósofos" (`ejemplo.js:366` y `:386`, 5 threads con array de semáforos indexado) no entran en un test razonable — se probaron manualmente (no quedó como test automatizado) y ni siquiera reducidos a 2 threads completan en menos de varios segundos, ver la limitación medida en la sección de arriba. No se agregó una versión reducida "a mano" como sustituto porque no aportaría una aserción distinta de las ya cubiertas con semáforos nombrados directamente — el problema es específicamente el patrón de array indexado, no el número de threads en sí.
+
+**Etapa 3 — worker + UI**
+
+7. `explorador.worker.js`: mismo patrón que `simulador.worker.js`, corre `Explorador.explorar()` y postea progreso cada N caminos (para barra de progreso) y el resultado final.
+8. UI mínima: botón "Verificar" en `index.html`, resultado en texto plano en un panel nuevo (reusar estilos de `panel-error` / `panel` existentes en `style.css`).
+9. UI: cargar un camino específico (deadlock o el que produjo cada valor distinto) en el visor de traza / paso a paso ya existente — probablemente reusando `secuenciaPrevia` como input para `pasoapaso.worker.js` en modo "forzar esta secuencia exacta".
+
+Cada tarea de la Etapa 1 y 2 es commiteable por separado y verificable con `node --test`, sin depender de la UI — se puede parar en cualquier punto entre etapas y ya queda algo útil y probado.
 
 ### Fixes de code review (sesión de code-review high sobre el diff de mejoras educativas)
 

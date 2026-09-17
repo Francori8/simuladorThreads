@@ -63,8 +63,11 @@ Thread(2){
           <button id="cancelar" hidden>Cancelar</button>
           <button id="btn-pasoapaso" class="btn-secundario">Paso a paso</button>
           <button id="btn-comparar" class="btn-secundario" title="Corre el mismo código dos veces con dos scheduling distintos, para ver el no-determinismo en acción">Comparar 2 ejecuciones</button>
+          <button id="btn-verificar" class="btn-secundario" title="Explora exhaustivamente todos los entrelazados posibles (dentro de un límite) para detectar deadlocks y todos los valores finales posibles de cada variable global">Verificar</button>
+          <button id="btn-verificar-cancelar" class="btn-secundario" hidden>Cancelar verificación</button>
           <button id="btn-compartir" class="btn-secundario" title="Copiar un link que abre el simulador con este código cargado">Compartir</button>
         </div>
+        <div id="panel-verificar" hidden></div>
       </section>
 
       <section id="visual">
