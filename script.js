@@ -1,5 +1,6 @@
 import ejemplos from "./ejemplo.js";
 import { iniciarModoStepByStep, cerrarModoStepByStep } from "./pasoapaso.js";
+import { iniciarVerificacion, cancelarVerificacion } from "./verificar.js";
 import { iniciarTour } from "./tour.js";
 import { generarLinkCompartir, leerCodigoDesdeUrl } from "./compartir.js";
 
@@ -123,6 +124,10 @@ function cargar() {
   $("#btn-copiar-traza").addEventListener("click", () => {
     navigator.clipboard.writeText(ultimaTrazaTexto);
   });
+  $("#btn-verificar").addEventListener("click", () => {
+    iniciarVerificacion($("#codigo").value, limiteDeRepeticionesActual());
+  });
+  $("#btn-verificar-cancelar").addEventListener("click", cancelarVerificacion);
   $("#btn-comparar").addEventListener("click", () => {
     iniciarComparacion();
     tourAlAparecer("#cmp-col-a .cmp-variables:not(:empty)", PASOS_TOUR_COMPARAR, "tour-comparar-visto");
@@ -130,6 +135,25 @@ function cargar() {
   $("#cmp-volver").addEventListener("click", cerrarComparacion);
   $("#cmp-col-a .cmp-reejecutar").addEventListener("click", () => ejecutarEnColumna("#cmp-col-a"));
   $("#cmp-col-b .cmp-reejecutar").addEventListener("click", () => ejecutarEnColumna("#cmp-col-b"));
+
+  const vistas = [
+    { chk: $("#chk-vista-variables"), seccion: $("#seccion-variables") },
+    { chk: $("#chk-vista-consola"),   seccion: $("#seccion-consola") },
+    { chk: $("#chk-vista-traza"),     seccion: $("#seccion-traza") },
+  ];
+  const panelSalida = $("#panel-salida");
+  function actualizarVistas() {
+    for (const { chk, seccion } of vistas) {
+      seccion.hidden = !chk.checked;
+    }
+    const variablesOcultas = $("#chk-vista-variables").checked === false;
+    const consolaOculta = $("#chk-vista-consola").checked === false;
+    panelSalida.classList.toggle("oculto-todo", variablesOcultas && consolaOculta);
+  }
+  for (const { chk } of vistas) {
+    chk.addEventListener("change", actualizarVistas);
+  }
+  actualizarVistas();
 
   const btnToggle = $("#btn-toggle-ejemplos");
   const panelEjemplos = $("#panel-ejemplos");
@@ -270,6 +294,7 @@ function ejecutarCodigo() {
   $("#traza").innerHTML = "";
   $("#variables").innerHTML = "";
   $("#btn-copiar-traza").hidden = true;
+  $("#panel-verificar").hidden = true;
   $("#cancelar").hidden = false;
   $("#ejecutar").disabled = true;
 

@@ -13,7 +13,7 @@ import {
   DeclaracionVariableLocal, InicializarLocal,
   While, Mayor, MayorOIgual, Menor, MenorOIgual,
   YLogico, OLogico, Repeat, For, ForEach,
-  LecturaIndexada, EscrituraIndexada, Maximo, Negacion, GetId,
+  LecturaIndexada, EscrituraIndexada, Maximo, Negacion, GetId, GetIndex,
   LlamadaFuncion, LlamadaMetodo, NuevaInstancia, LecturaThis, Return,
   Acquire, Release,
   EntradaMonitor, SalidaMonitor, Wait, Notify, NotifyAll, LecturaCondicion,
@@ -1045,6 +1045,10 @@ class Parser {
           this.expect(TK.RPAREN);
           return new GetId();
         }
+        if (name === 'getIndex') {
+          this.expect(TK.RPAREN);
+          return new GetIndex();
+        }
         if (name === 'sleep') {
           const n = this.parseExpr();
           this.expect(TK.RPAREN);
@@ -1168,6 +1172,7 @@ export function parsear(textoRaw, mem, consola, limiteRepeticiones) {
         nombre ?? null,
         clasesCopia,
         monitoresCopia,
+        i,
       ));
     }
   }

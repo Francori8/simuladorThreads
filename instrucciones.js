@@ -628,6 +628,17 @@ export class GetId extends Instruccion {
   toString() { return `getId()`; }
 }
 
+export class GetIndex extends Instruccion {
+  resolver(hilo) {
+    this.resultado = hilo.getIndex();
+    hilo.informar("GetIndex", `indice = ${this.resultado}`);
+    this.resuelto = true;
+  }
+
+  resolverPuro() { return this.resultado; }
+  toString() { return `getIndex()`; }
+}
+
 export class Desigualdad extends OperacionLogica {
   operar(a, b) { return a != b; }
   get simbolo() { return "!="; }
@@ -1214,7 +1225,7 @@ export class Notify extends Instruccion {
     const vc          = this.condicionExpr.resolverPuro();
     const instMonitor = hilo.getMonitorActivo();
     hilo.informar("Notify", `notificando condición`);
-    vc.notificarUno(instMonitor);
+    vc.notificarUno(instMonitor, hilo);
     this.resuelto = true;
   }
 
@@ -1241,7 +1252,7 @@ export class NotifyAll extends Instruccion {
     const vc          = this.condicionExpr.resolverPuro();
     const instMonitor = hilo.getMonitorActivo();
     hilo.informar("NotifyAll", `notificando todos`);
-    vc.notificarTodos(instMonitor);
+    vc.notificarTodos(instMonitor, hilo);
     this.resuelto = true;
   }
 

@@ -10,6 +10,7 @@ export class Canal {
   }
 
   send(valor, hilo) {
+    hilo.dependencias.registrar("obj", this);
     if (this.esperando.length > 0) {
       // Hand-off directo: hay alguien esperando, no pasar por el buffer
       const { hilo: receptor, instruccion } = this.esperando.shift();
@@ -24,6 +25,7 @@ export class Canal {
   // Retorna el valor si hay dato disponible inmediatamente.
   // Si no, bloquea el hilo y retorna null.
   receive(hilo, instruccion) {
+    hilo.dependencias.registrar("obj", this);
     if (this.buffer.length > 0) {
       const valor = this.buffer.shift();
       hilo.informar("CanalReceive", `recibido: ${valor}`);
